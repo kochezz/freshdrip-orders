@@ -73,8 +73,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .gate-hero .bottles { position: absolute; right: -30px; bottom: 90px; width: 190px; opacity: .22; transform: rotate(8deg); pointer-events: none; }
 @media (max-width: 880px) {
   .gate-hero { padding: calc(18px + env(safe-area-inset-top, 0px)) 20px 22px; gap: 12px; }
-  .gate-hero .logo { width: 150px; margin-top: 6px; }
-  .gate-hero h1 { font-size: 1.85rem; }
+  .gate-hero .logo { width: 96px; margin-top: 4px; }
+  .gate-hero h1 { font-size: 1.55rem; }
+  .gate-hero p.lede { display: none; }
+  .gate-panel { align-items: flex-start; padding-top: 20px; }
   .gate-hero .bottles, .gate-facts { display: none; }
 }
 .gate-panel { display: flex; align-items: center; justify-content: center; padding: 28px 20px calc(28px + env(safe-area-inset-bottom, 0px)); }
