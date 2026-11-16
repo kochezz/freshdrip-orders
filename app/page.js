@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { BUSINESS_TYPES, MIN_PACKS, RETAIL_OUTLET } from "@/lib/config";
+import InstallApp from "./InstallApp";
 import SignIn from "./SignIn";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default async function Home() {
       <section className="gate-panel">
         <div className="gate-stack">
           <SignIn minPacks={MIN_PACKS} outlet={RETAIL_OUTLET} businessTypes={BUSINESS_TYPES} />
+          <InstallApp variant="inline" />
           <a className="staff-link" href="/staff">Vilagio staff: manage orders →</a>
         </div>
       </section>

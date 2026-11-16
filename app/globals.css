@@ -321,3 +321,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .searchrow input { flex: 1 1 280px; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #d8d1c0; background: #fff; }
 .acclist { display: grid; gap: 14px; }
 .acclist .calllist span { display: block; }
+
+/* install app */
+.install { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+.install.card { margin-top: 16px; }
+.install.inline { margin-top: 22px; }
+.install img { border-radius: 10px; }
+.install-txt b { display: block; font-size: .92rem; }
+.install-txt span { font-size: .82rem; color: var(--muted); }
+.install-txt ol { margin: 8px 0 0; padding-left: 18px; font-size: .84rem; color: #3b4766; display: grid; gap: 4px; }
+.install-act { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }

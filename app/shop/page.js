@@ -5,6 +5,7 @@ import { MIN_PACKS, RETAIL_OUTLET } from "@/lib/config";
 import { sql } from "@/lib/db";
 import Footer from "../Footer";
 import TopBar from "../TopBar";
+import InstallApp from "../InstallApp";
 import ShopClient from "./ShopClient";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export default async function Shop({ searchParams }) {
   return (
     <div className="has-cart">
       <TopBar session={session} current="shop" />
+      <div className="wrap"><InstallApp variant="card" /></div>
       <ShopClient
         accountId={session.account_id}
         catalogue={catalogue}
