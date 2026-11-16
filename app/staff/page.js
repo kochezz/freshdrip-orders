@@ -2,6 +2,7 @@ import { ALL_STATUS_KEYS, statusInfo } from "@/lib/config";
 import { sql } from "@/lib/db";
 import { displayPhone } from "@/lib/phone";
 import { kwacha } from "@/lib/pricing";
+import StaffBar from "./StaffBar";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "freshDrip orders · Staff" };
@@ -40,14 +41,7 @@ export default async function Staff({ searchParams }) {
 
   return (
     <div className="staff">
-      <header className="bar">
-        <div className="wrap">
-          <img src="/freshdrip-logo.png" alt="freshDrip" width="40" height="30" />
-          <div className="who" style={{ marginLeft: 12, textAlign: "left" }}>
-            <b>Wholesale orders</b>Staff view
-          </div>
-        </div>
-      </header>
+      <StaffBar current="orders" />
       <main className="wrap" style={{ paddingBottom: 60 }}>
         <div className="kpis">
           <div className={`kpi ${k.new_orders ? "alert" : ""}`}><span>New, to confirm</span><b>{k.new_orders}</b></div>

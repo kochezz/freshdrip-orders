@@ -64,3 +64,13 @@ test("phone numbers", () => {
   assert.ok(!validPin("042"));
   assert.ok(!validPin("04a0"));
 });
+
+import { tierFor } from "../lib/config.js";
+test("tiers by packs", () => {
+  assert.equal(tierFor(0).key, "member");
+  assert.equal(tierFor(19.9).toNext, 1);
+  assert.equal(tierFor(20).key, "bronze");
+  assert.equal(tierFor(150).key, "gold");
+  assert.equal(tierFor(150).toNext, 250);
+  assert.equal(tierFor(1000).next, null);
+});

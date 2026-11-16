@@ -18,6 +18,9 @@ Which products appear, pack sizes (12s cost half a 24 plus 5%), and the 20-pack 
 - `/shop` catalogue, basket, checkout
 - `/orders`, `/orders/FD-ORD-2026-0001` tracking
 - `/staff` order list for the team; `/staff/<id>` to confirm, quote delivery and move an order on (password: `STAFF_PASSWORD`)
+- `/staff/insights` revenue trend, product performance, loyalty tiers and who needs a call (ERP POS sales + confirmed portal orders); `/staff/customers` loyalty ranking with CSV downloads
+
+Loyalty tiers (Member, Bronze, Silver, Gold, Platinum) are based on packs bought in the last 90 days; thresholds are in `lib/config.js`.
 
 ## Setup
 

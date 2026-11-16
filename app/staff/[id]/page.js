@@ -3,6 +3,7 @@ import { ALL_STATUS_KEYS, statusInfo } from "@/lib/config";
 import { sql } from "@/lib/db";
 import { displayPhone } from "@/lib/phone";
 import { kwacha } from "@/lib/pricing";
+import StaffBar from "../StaffBar";
 import StaffOrderForm from "./StaffOrderForm";
 
 export const dynamic = "force-dynamic";
@@ -28,12 +29,7 @@ export default async function StaffOrder({ params }) {
 
   return (
     <div className="staff">
-      <header className="bar">
-        <div className="wrap">
-          <img src="/freshdrip-logo.png" alt="freshDrip" width="40" height="30" />
-          <nav style={{ marginLeft: 12 }}><a href="/staff">← All orders</a></nav>
-        </div>
-      </header>
+      <StaffBar current="orders" />
       <main className="wrap">
         <div className="page-head">
           <span className="label">Order</span>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { STATUSES, statusInfo } from "@/lib/config";
+import { STATUSES, TIER_WINDOW_DAYS, statusInfo } from "@/lib/config";
+import { loadCustomerTier } from "@/lib/insights";
 import { sql } from "@/lib/db";
 import { kwacha } from "@/lib/pricing";
 import Footer from "../Footer";
@@ -13,10 +14,12 @@ const fmtDate = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric",
 export default async function Orders() {
   const session = await getSession();
   if (!session) redirect("/");
+  const tierP = loadCustomerTier(session.customer_id).catch(() => null);
   const orders = await sql()`
     SELECT order_no, status, created_at, total_packs, subtotal_zmw, delivery_fee_zmw, fulfilment
       FROM portal_orders WHERE customer_id = ${session.customer_id}
      ORDER BY created_at DESC LIMIT 100`;
+  const tier = await tierP;
 
   return (
     <>
@@ -26,6 +29,22 @@ export default async function Orders() {
           <span className="label">Tracking</span>
           <h1>My orders</h1>
           <p>Every order from {session.trading_name}, newest first.</p>
+          {tier && (
+            <div className="tiercard">
+              <div className="row">
+                <span><span className={`tierbadge t-${tier.key}`}>{tier.name}</span> <span className="muted" style={{ marginLeft: 6 }}>freshDrip customer tier</span></span>
+                <b>{Math.floor(tier.packs ?? 0)} packs in the last {TIER_WINDOW_DAYS} days</b>
+              </div>
+              {tier.next ? (
+                <>
+                  <div className="track"><div className="fill" style={{ width: `${Math.min(100, ((tier.packs - tier.minPacks) / (tier.next.minPacks - tier.minPacks)) * 100)}%` }} /></div>
+                  <span className="muted" style={{ fontSize: ".84rem" }}>{tier.toNext} more pack{tier.toNext === 1 ? "" : "s"} to reach {tier.next.name}. Counted on delivered orders.</span>
+                </>
+              ) : (
+                <span className="muted" style={{ fontSize: ".84rem" }}>You're in our top tier. Thank you.</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="olist">
           {orders.length === 0 && (

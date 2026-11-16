@@ -10,6 +10,7 @@
 --     their contacts and locations
 --   * read and write its own portal_* tables
 --   * read the email and role of ERP users (for order alerts; no passwords)
+--   * read POS sales and exchange rates (staff insights dashboard; read-only)
 -- It cannot change prices, stock, sales, users or anything else in the ERP.
 --
 -- The role's password is NOT set here. Set it separately:
@@ -99,6 +100,8 @@ GRANT SELECT ON products, customers, customer_contacts, customer_locations TO po
 GRANT INSERT ON customers, customer_contacts, customer_locations TO portal_app;
 GRANT SELECT, INSERT, UPDATE ON portal_accounts, portal_orders, portal_order_lines, portal_order_events TO portal_app;
 GRANT SELECT (email, role, is_active) ON users TO portal_app;
+-- Staff insights dashboard: read-only POS sales and the exchange rate.
+GRANT SELECT ON sales_transactions, sales_transaction_lines, exchange_rates TO portal_app;
 GRANT USAGE, SELECT ON SEQUENCE portal_order_seq, portal_order_events_event_id_seq TO portal_app;
 
 COMMIT;
