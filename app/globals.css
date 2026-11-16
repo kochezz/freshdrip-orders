@@ -141,7 +141,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chips button { font-size: .8rem; font-weight: 600; padding: 7px 10px; border-radius: 999px; border: 1px solid #d8d1c0; background: #fff; cursor: pointer; color: var(--ink); }
 .chips button:hover { border-color: var(--gold); }
 .chips button.pal { border-color: var(--gold); color: var(--gold-2); }
-.prod .line { margin-top: auto; padding-top: 10px; font-size: .85rem; color: var(--muted); min-height: 1.5em; }
+.prod .line { padding-top: 8px; font-size: .85rem; color: var(--muted); }
+.size { margin-top: 12px; padding-top: 12px; border-top: 1px solid #efe9dc; }
+.size:first-of-type { border-top: 0; padding-top: 4px; }
+.size .pack em { font-style: normal; color: var(--gold-2); }
+.size .price { margin-top: 2px; }
+.size + .size .price b { font-size: 1.35rem; }
 .prod .line b { color: var(--ink); }
 
 /* sticky basket bar */

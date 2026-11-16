@@ -12,33 +12,43 @@ const erp = [
   { product_id: "p6", sku: "FD-5GAL-REFILL", is_active: true, selling_price_zmw: "65", wholesale_price_zmw: "52" },
 ];
 
-test("catalogue: pack price from ERP unit price; hides unpriced and inactive", () => {
+test("catalogue: pack prices from ERP unit price; 12-pack = half a 24 + 5%", () => {
   const c = buildCatalogue(erp);
   assert.deepEqual(c.map((x) => x.sku), ["FD-500ML-PREMIUM", "FD-500ML-REGULAR", "SACHET-WATER-500ML", "FD-5GAL-REFILL"]);
-  assert.equal(c[0].packPrice, 305.76);
-  assert.equal(c[1].packPrice, 114.96);
-  assert.equal(c[2].packPrice, 18);
-  assert.equal(c[3].packPrice, 52);
+  const [prem24, prem12] = c[0].sizes;
+  assert.equal(prem24.packPrice, 305.76);
+  assert.equal(prem12.packPrice, 160.52); // 305.76 / 2 * 1.05 = 160.524
+  const [reg24, reg12] = c[1].sizes;
+  assert.equal(reg24.packPrice, 114.96);
+  assert.equal(reg12.packPrice, 60.35); // 114.96 / 2 * 1.05 = 60.354
+  assert.ok(reg12.perUnit > reg24.perUnit);
+  assert.equal(c[2].sizes[0].packPrice, 18);
+  assert.equal(c[3].sizes[0].packPrice, 52);
 });
 
-test("basket: server prices, merges duplicate lines, enforces 20-pack minimum", () => {
+test("basket: server prices, merges duplicates, 12-packs count half toward 20", () => {
   const c = buildCatalogue(erp);
-  const small = priceBasket(c, [{ sku: "FD-500ML-REGULAR", packs: 19 }]);
+  const small = priceBasket(c, [{ key: "FD-500ML-REGULAR:24", packs: 19 }]);
   assert.match(small.errors[0], /minimum order is 20/);
+  const twelves = priceBasket(c, [{ key: "FD-500ML-REGULAR:12", packs: 30 }]);
+  assert.equal(twelves.moqPacks, 15);
+  assert.match(twelves.errors[0], /You have 15/);
   const ok = priceBasket(c, [
-    { sku: "FD-500ML-REGULAR", packs: 10, packPrice: 0.01 },
-    { sku: "FD-500ML-REGULAR", packs: 5 },
-    { sku: "FD-5GAL-REFILL", packs: 5 },
+    { key: "FD-500ML-REGULAR:24", packs: 10, packPrice: 0.01 },
+    { key: "FD-500ML-REGULAR:24", packs: 5 },
+    { key: "FD-500ML-REGULAR:12", packs: 2 },
+    { key: "FD-5GAL-REFILL:1", packs: 4 },
   ]);
   assert.deepEqual(ok.errors, []);
-  assert.equal(ok.totalPacks, 20);
+  assert.equal(ok.totalPacks, 21);
+  assert.equal(ok.moqPacks, 20);
   assert.equal(ok.lines[0].packs, 15);
-  assert.equal(ok.subtotal, 1984.4);
+  assert.equal(ok.subtotal, 2053.1);
 });
 
 test("basket: rejects unknown or hidden products and junk quantities", () => {
   const c = buildCatalogue(erp);
-  const r = priceBasket(c, [{ sku: "FD-750ML-REGULAR", packs: 30 }, { sku: "FD-500ML-PREMIUM", packs: -4 }, { sku: "FD-500ML-PREMIUM", packs: 2.5 }]);
+  const r = priceBasket(c, [{ key: "FD-750ML-REGULAR:24", packs: 30 }, { key: "FD-500ML-PREMIUM:24", packs: -4 }, { key: "FD-500ML-PREMIUM:24", packs: 2.5 }, { key: "FD-5GAL-REFILL:24", packs: 30 }]);
   assert.ok(r.errors.some((e) => /not available/.test(e)));
   assert.equal(r.lines.length, 0);
   assert.deepEqual(priceBasket(c, null).errors, ["Your basket is empty."]);

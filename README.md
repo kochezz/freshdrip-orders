@@ -10,7 +10,7 @@ The portal has no database of its own. It reads and writes the **VTL ERP databas
 | Customers | ERP `customers`. New sign-ups are added as Wholesale (T2), status `PENDING_CFO`, so the CFO approves them in the ERP |
 | Logins, orders, order history | `portal_accounts`, `portal_orders`, `portal_order_lines`, `portal_order_events` |
 
-Which products appear, pack sizes and the minimum order are set in `lib/config.js`.
+Which products appear, pack sizes (12s cost half a 24 plus 5%), and the 20-pack minimum (a 12-pack counts as half) are set in `lib/config.js`.
 
 ## Pages
 

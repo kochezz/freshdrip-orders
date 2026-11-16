@@ -6,7 +6,7 @@ const K = (n) => `K${Number(n || 0).toLocaleString("en-ZM", { minimumFractionDig
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 export default function ShopClient({ accountId, catalogue, minPacks, outlet, defaultAddress, defaultTown, initialBasket, reorderNo }) {
-  const storeKey = `fd-basket-${accountId}`;
+  const storeKey = `fd-basket-v2-${accountId}`;
   const [qty, setQty] = useState(initialBasket || {});
   const [loaded, setLoaded] = useState(!!initialBasket);
   const [view, setView] = useState("shop");
@@ -21,7 +21,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
     if (initialBasket) return;
     try {
       const saved = JSON.parse(localStorage.getItem(storeKey) || "{}");
-      const known = new Set(catalogue.map((c) => c.sku));
+      const known = new Set(catalogue.flatMap((c) => c.sizes.map((z) => z.key)));
       setQty(Object.fromEntries(Object.entries(saved).filter(([k, v]) => known.has(k) && Number.isInteger(v) && v > 0)));
     } catch {}
     setLoaded(true);
@@ -33,31 +33,38 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
     } catch {}
   }, [qty, loaded, storeKey]);
 
-  const setPacks = (sku, n) =>
+  const setPacks = (key, n) =>
     setQty((q) => {
       const v = Math.max(0, Math.min(9999, Math.floor(Number(n) || 0)));
       const next = { ...q };
-      if (v) next[sku] = v;
-      else delete next[sku];
+      if (v) next[key] = v;
+      else delete next[key];
       return next;
     });
-  const add = (sku, n) => setPacks(sku, (qty[sku] || 0) + n);
+  const add = (key, n) => setPacks(key, (qty[key] || 0) + n);
 
   const lines = useMemo(
-    () => catalogue.filter((c) => qty[c.sku] > 0).map((c) => ({ ...c, packs: qty[c.sku], total: Math.round(c.packPrice * qty[c.sku] * 100) / 100 })),
+    () =>
+      catalogue.flatMap((c) =>
+        c.sizes
+          .filter((z) => qty[z.key] > 0)
+          .map((z) => ({ key: z.key, name: c.name, image: c.image, packLabel: z.label, packPrice: z.packPrice, moqWeight: z.moqWeight, packs: qty[z.key], total: Math.round(z.packPrice * qty[z.key] * 100) / 100 }))
+      ),
     [catalogue, qty]
   );
   const totalPacks = lines.reduce((s, l) => s + l.packs, 0);
+  const counted = Math.round(lines.reduce((s, l) => s + l.packs * l.moqWeight, 0) * 10) / 10;
   const subtotal = Math.round(lines.reduce((s, l) => s + l.total, 0) * 100) / 100;
-  const short = Math.max(0, minPacks - totalPacks);
-  const ready = totalPacks >= minPacks;
+  const short = Math.max(0, Math.round((minPacks - counted) * 10) / 10);
+  const ready = counted >= minPacks;
+  const shortText = `${short} more pack${short === 1 ? "" : "s"} of 24 (or ${Math.ceil(short * 2)} of 12)`;
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   async function placeOrder(e) {
     e.preventDefault();
     const er = {};
-    if (!ready) er.basket = `Add ${short} more pack${short === 1 ? "" : "s"} to reach the ${minPacks}-pack minimum.`;
+    if (!ready) er.basket = `Add ${shortText} to reach the ${minPacks}-pack minimum.`;
     if (form.fulfilment === "delivery") {
       if (form.deliveryAddress.trim().length < 4) er.deliveryAddress = "Enter the delivery address.";
       if (form.deliveryTown.trim().length < 2) er.deliveryTown = "Enter the town.";
@@ -69,7 +76,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, lines: lines.map((l) => ({ sku: l.sku, packs: l.packs })) }),
+        body: JSON.stringify({ ...form, lines: lines.map((l) => ({ key: l.key, packs: l.packs })) }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 401) return (window.location.href = "/");
@@ -123,7 +130,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
           <div className="moq-note">
             <span className="badge">Min {minPacks} packs</span>
             <span>
-              Orders start at {minPacks} packs in total, mixed across any products. A 5-gallon bottle counts as one pack. Need less? Visit our{" "}
+              Orders start at {minPacks} packs, mixed across any products. A 24-pack, a pack of 18 sachets or a 5-gallon bottle counts as one; a 12-pack counts as half. Need less? Visit our{" "}
               {outlet.name} at <b>{outlet.address}</b>.
             </span>
           </div>
@@ -134,7 +141,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
         ) : (
           <div className="products">
             {catalogue.map((c) => {
-              const n = qty[c.sku] || 0;
+              const n = c.sizes.reduce((t, z) => t + (qty[z.key] || 0), 0);
               return (
                 <article key={c.sku} className={`prod ${n ? "in" : ""}`}>
                   <div className="ph">
@@ -144,37 +151,44 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
                   <div className="body">
                     <h3>{c.name}</h3>
                     <span className="tag">{c.tagline}</span>
-                    <span className="pack">{c.packLabel}</span>
-                    <div className="price">
-                      <b>{K(c.packPrice)}</b>
-                      <span>per pack{c.perPack > 1 ? ` · ${K(c.unitPrice)} each` : ""}</span>
-                      {c.retailPackPrice > c.packPrice && <s>{K(c.retailPackPrice)} retail</s>}
-                    </div>
-                    <div className="qty">
-                      <button type="button" aria-label={`One fewer pack of ${c.name}`} onClick={() => add(c.sku, -1)}>−</button>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min="0"
-                        aria-label={`Packs of ${c.name}`}
-                        value={n || ""}
-                        placeholder="0"
-                        onChange={(e) => setPacks(c.sku, e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                      />
-                      <button type="button" aria-label={`One more pack of ${c.name}`} onClick={() => add(c.sku, 1)}>+</button>
-                    </div>
-                    <div className="chips">
-                      <button type="button" onClick={() => add(c.sku, 5)}>+5</button>
-                      <button type="button" onClick={() => add(c.sku, 10)}>+10</button>
-                      <button type="button" onClick={() => add(c.sku, 20)}>+20</button>
-                      {c.palletPacks && (
-                        <button type="button" className="pal" onClick={() => add(c.sku, c.palletPacks)}>
-                          +1 pallet ({c.palletPacks})
-                        </button>
-                      )}
-                    </div>
-                    <div className="line">{n > 0 ? <>Line total <b>{K(c.packPrice * n)}</b></> : " "}</div>
+                    {c.sizes.map((z) => {
+                      const n = qty[z.key] || 0;
+                      return (
+                        <div className={`size ${n ? "on" : ""}`} key={z.key}>
+                          <div className="size-head">
+                            <span className="pack">{z.label}{z.uplift > 0 && <em> · 5% more per bottle than 24s</em>}</span>
+                          </div>
+                          <div className="price">
+                            <b>{K(z.packPrice)}</b>
+                            <span>per pack{z.perPack > 1 ? ` · ${K(z.perUnit)} each` : ""}</span>
+                            {z.retailPackPrice > z.packPrice && <s>{K(z.retailPackPrice)} retail</s>}
+                          </div>
+                          <div className="qty">
+                            <button type="button" aria-label={`One fewer ${z.label} of ${c.name}`} onClick={() => add(z.key, -1)}>−</button>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min="0"
+                              aria-label={`${z.label} of ${c.name}, number of packs`}
+                              value={n || ""}
+                              placeholder="0"
+                              onChange={(e) => setPacks(z.key, e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                            />
+                            <button type="button" aria-label={`One more ${z.label} of ${c.name}`} onClick={() => add(z.key, 1)}>+</button>
+                          </div>
+                          <div className="chips">
+                            <button type="button" onClick={() => add(z.key, 5)}>+5</button>
+                            <button type="button" onClick={() => add(z.key, 10)}>+10</button>
+                            <button type="button" onClick={() => add(z.key, 20)}>+20</button>
+                            {z.palletPacks && (
+                              <button type="button" className="pal" onClick={() => add(z.key, z.palletPacks)}>+1 pallet ({z.palletPacks})</button>
+                            )}
+                          </div>
+                          {n > 0 && <div className="line">Line total <b>{K(z.packPrice * n)}</b></div>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </article>
               );
@@ -189,15 +203,15 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
             <div className="meter">
               <div className="row">
                 <span>Minimum order</span>
-                <b>{totalPacks} / {minPacks} packs</b>
+                <b>{counted} / {minPacks} packs</b>
               </div>
-              <div className="track"><div className={`fill ${ready ? "ok" : ""}`} style={{ width: `${Math.min(100, (totalPacks / minPacks) * 100)}%` }} /></div>
+              <div className="track"><div className={`fill ${ready ? "ok" : ""}`} style={{ width: `${Math.min(100, (counted / minPacks) * 100)}%` }} /></div>
               {ready ? (
                 <small className="go">Minimum reached. Review your order when ready.</small>
               ) : totalPacks === 0 ? (
                 <small>Add packs to start your order.</small>
               ) : (
-                <small>Add {short} more pack{short === 1 ? "" : "s"}. Smaller orders: {outlet.address}.</small>
+                <small>Add {shortText}. Smaller orders: {outlet.address}.</small>
               )}
             </div>
             <div className="total">
@@ -224,22 +238,22 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
 
             <div className="lines">
               {lines.map((l) => (
-                <div className="ln" key={l.sku}>
+                <div className="ln" key={l.key}>
                   <img src={l.image} alt="" />
                   <div>
                     <div className="n">{l.name}</div>
                     <div className="d">{l.packLabel} · {K(l.packPrice)}</div>
                     <div className="mini">
-                      <button type="button" aria-label="One fewer" onClick={() => add(l.sku, -1)}>−</button>
+                      <button type="button" aria-label="One fewer" onClick={() => add(l.key, -1)}>−</button>
                       <span>{l.packs}</span>
-                      <button type="button" aria-label="One more" onClick={() => add(l.sku, 1)}>+</button>
+                      <button type="button" aria-label="One more" onClick={() => add(l.key, 1)}>+</button>
                     </div>
                   </div>
                   <div className="t">{K(l.total)}</div>
                 </div>
               ))}
             </div>
-            {!ready && <p className="form-err">Add {short} more pack{short === 1 ? "" : "s"} to reach the {minPacks}-pack minimum.</p>}
+            {!ready && <p className="form-err">Add {shortText} to reach the {minPacks}-pack minimum.</p>}
 
             <div className="sec">
               <span className="label">Delivery or collection</span>
@@ -286,7 +300,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
             </label>
 
             <div className="sum">
-              <div><span>Packs</span><b>{totalPacks}</b></div>
+              <div><span>Packs</span><b>{totalPacks}{counted !== totalPacks ? ` (counts as ${counted})` : ""}</b></div>
               <div><span>Delivery</span><span>{form.fulfilment === "delivery" ? "Quoted when we confirm" : "Collection, no charge"}</span></div>
               <div className="big"><span>Estimated total</span><b>{K(subtotal)}</b></div>
               <span className="muted" style={{ fontSize: ".78rem" }}>
