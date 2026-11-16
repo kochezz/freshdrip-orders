@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Registers the service worker and offers "Install app".
+// Offers "Install app" (the service worker is started by RegisterSW in the layout).
 //  - Android/Chrome/Edge/Samsung: uses the browser's own install prompt.
 //  - iPhone/iPad Safari: no prompt exists, so we show the two taps needed.
 //  - Already installed (opened from the home screen): shows nothing.
@@ -14,7 +14,6 @@ export default function InstallApp({ variant = "card" }) {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
     setInstalled(standalone);
     const ua = navigator.userAgent;

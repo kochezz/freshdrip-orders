@@ -1,4 +1,5 @@
 import "./globals.css";
+import RegisterSW from "./RegisterSW";
 
 export const metadata = {
   title: "freshDrip Wholesale · Order online",
@@ -32,7 +33,10 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,500;6..96,600&family=Jost:wght@400;500;600;700&display=swap"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <RegisterSW />
+      </body>
     </html>
   );
 }
