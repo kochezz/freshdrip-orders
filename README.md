@@ -1,6 +1,6 @@
 # freshDrip wholesale orders
 
-Customer-facing order portal for Vilagio Trading Limited. Wholesale customers sign in with their phone number and a 4-digit PIN, order freshDrip by the pack (minimum 20 packs), and track each order. Every order emails Kochez, Emmanuel Zulu, Kalasa Mulilo and sales@vilag.io.
+Customer-facing order portal for Vilagio Trading Limited. Wholesale customers sign in with their phone number and a 4-digit PIN, order freshDrip by the pack (minimum 20 packs), and track each order. Every order and new sign-up emails the people in `ORDER_ALERT_EMAILS` plus every active ERP user with the Sales role.
 
 The portal has no database of its own. It reads and writes the **VTL ERP database** (Neon `vilagio-inventory-prod`) as the restricted role `portal_app`:
 

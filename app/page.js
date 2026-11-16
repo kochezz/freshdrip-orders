@@ -25,7 +25,10 @@ export default async function Home() {
         </div>
       </section>
       <section className="gate-panel">
-        <SignIn minPacks={MIN_PACKS} outlet={RETAIL_OUTLET} businessTypes={BUSINESS_TYPES} />
+        <div className="gate-stack">
+          <SignIn minPacks={MIN_PACKS} outlet={RETAIL_OUTLET} businessTypes={BUSINESS_TYPES} />
+          <a className="staff-link" href="/staff">Vilagio staff: manage orders →</a>
+        </div>
       </section>
     </main>
   );
