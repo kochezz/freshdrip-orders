@@ -1,0 +1,21 @@
+{
+  "name": "freshdrip-orders",
+  "version": "1.0.0",
+  "private": true,
+  "description": "freshDrip wholesale order portal: customers place and track orders; orders land in the VTL ERP database",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.0.2",
+    "next": "14.2.35",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
