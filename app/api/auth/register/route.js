@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { hashPin, setSessionCookie } from "@/lib/auth";
-import { findAccountByPhone, findErpCustomerByPhone } from "@/lib/customers";
+import { findAccountByPhone, findErpCustomerByBusiness, findErpCustomerByPhone } from "@/lib/customers";
 import { sql } from "@/lib/db";
 import { sendAccountAlert } from "@/lib/email";
 import { nationalNumber } from "@/lib/phone";
@@ -25,6 +25,16 @@ export async function POST(req) {
   }
   if (await findErpCustomerByPhone(national)) {
     return NextResponse.json({ error: "This number is already on our customer list. Go back and set up your PIN instead." }, { status: 409 });
+  }
+
+  // Same business already in the ERP (by name or TPIN): don't create a duplicate.
+  const existing = await findErpCustomerByBusiness(v.tradingName, v.tpin);
+  if (existing) {
+    return NextResponse.json(
+      { code: "existing_business", business: existing.tradingName, contactFirstName: existing.contactFirstName,
+        error: `${existing.tradingName} is already a freshDrip customer. Request access instead of registering again.` },
+      { status: 409 }
+    );
   }
 
   const customerId = randomUUID();

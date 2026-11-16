@@ -315,3 +315,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* customer tier card */
 .tiercard { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; margin-top: 14px; }
 .tiercard .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; font-size: .9rem; }
+
+/* staff access */
+.searchrow { display: flex; gap: 8px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+.searchrow input { flex: 1 1 280px; font-size: 1rem; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #d8d1c0; background: #fff; }
+.acclist { display: grid; gap: 14px; }
+.acclist .calllist span { display: block; }

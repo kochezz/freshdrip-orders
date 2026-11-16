@@ -4,6 +4,7 @@ export default function StaffBar({ current }) {
     { key: "orders", href: "/staff", label: "Orders" },
     { key: "insights", href: "/staff/insights", label: "Insights" },
     { key: "customers", href: "/staff/customers", label: "Customers" },
+    { key: "access", href: "/staff/access", label: "Access" },
   ];
   return (
     <header className="bar">

@@ -10,6 +10,8 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [business, setBusiness] = useState("");
+  const [existing, setExisting] = useState({ business: "", contact: null });
+  const [reset, setReset] = useState(false);
   const [f, setF] = useState({ pin: "", pinConfirm: "", contactName: "", email: "", tradingName: "", businessType: "", town: "", address: "", tpin: "", monthlyPacks: "" });
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
@@ -44,7 +46,8 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
     const data = await post("/api/auth/check", { phone });
     if (!data) return;
     if (data.state === "account") setStep("pin");
-    else if (data.state === "erp") {
+    else if (data.state === "erp" || data.state === "reset") {
+      setReset(data.state === "reset");
       setBusiness(data.business);
       setStep("claim");
     } else setStep("register");
@@ -63,7 +66,7 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
     if (data) window.location.href = "/shop";
   }
 
-  function nextRegister(e) {
+  async function nextRegister(e) {
     e.preventDefault();
     const er = {};
     if (f.tradingName.trim().length < 2) er.tradingName = "Enter your business name.";
@@ -72,16 +75,44 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
     if (f.address.trim().length < 4) er.address = "Enter where you're based.";
     if (f.contactName.trim().length < 2) er.contactName = "Enter your name.";
     setErrors(er);
-    if (!Object.keys(er).length) setStep("register-pin");
+    if (Object.keys(er).length) return;
+    // Already a customer under this name or TPIN? Don't register twice.
+    const check = await post("/api/auth/business-check", { tradingName: f.tradingName, tpin: f.tpin });
+    if (check?.existing) {
+      setExisting({ business: check.business, contact: check.contactFirstName });
+      setStep("existing");
+      return;
+    }
+    setStep("register-pin");
   }
 
   async function register(e) {
     e.preventDefault();
-    const data = await post("/api/auth/register", { phone, ...f }, (er) => {
+    setBusy(true);
+    setErrors({});
+    try {
+      const res = await fetch("/api/auth/register", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, ...f }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) return (window.location.href = "/shop");
+      if (data.code === "existing_business") {
+        setExisting({ business: data.business, contact: data.contactFirstName });
+        setStep("existing");
+        return;
+      }
+      const er = data.errors || { form: data.error || "Something went wrong. Please try again." };
+      setErrors(er);
       // Business-detail errors live on the previous step.
       if (["tradingName", "businessType", "town", "address", "tpin", "contactName", "email"].some((k) => er[k])) setStep("register");
-    });
-    if (data) window.location.href = "/shop";
+    } catch {
+      setErrors({ form: "No connection. Check your signal and try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function requestAccess() {
+    const data = await post("/api/auth/request-access", { phone, contactName: f.contactName, email: f.email, tradingName: f.tradingName, tpin: f.tpin });
+    if (data) setStep("requested");
   }
 
   const back = (to) => () => {
@@ -156,9 +187,9 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
 
       {step === "claim" && (
         <form onSubmit={claim} noValidate>
-          <span className="label">You're already a customer</span>
+          <span className="label">{reset ? "PIN reset" : "You're already a customer"}</span>
           <h2>{business}</h2>
-          <p className="sub">This number is on our customer list. Set up a PIN to start ordering online.</p>
+          <p className="sub">{reset ? "Your PIN was reset. Choose a new one to carry on ordering." : "This number is on our customer list. Set up a PIN to start ordering online."}</p>
           {Field({ k: "contactName", label: "Your name", autoComplete: "name" })}
           {Field({ k: "email", label: "Email", hint: "(optional, for order confirmations)", type: "email", inputMode: "email", autoComplete: "email" })}
           {PinFields({ confirm: true })}
@@ -200,6 +231,44 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
           <button className="btn block" style={{ marginTop: 16 }}>Next: choose a PIN</button>
           <button type="button" className="back" onClick={back("phone")}>← Use a different number</button>
         </form>
+      )}
+
+      {step === "existing" && (
+        <div>
+          <span className="label">Already a freshDrip customer</span>
+          <h2>{existing.business}</h2>
+          <p className="sub">
+            {existing.business} is already on our customer list, so there's no need to register again. Your number ({phone}) just isn't on the account yet.
+          </p>
+          <div className="notice" style={{ marginTop: 16 }}>
+            {existing.contact ? (
+              <>Ask <b>{existing.contact}</b>, the authorised contact for {existing.business}, to sign in with their number, or ask us to add yours.</>
+            ) : (
+              <>Ask us to add your number to {existing.business}'s account.</>
+            )}{" "}
+            We'll confirm with the business, then you can sign in with your number and set a PIN.
+          </div>
+          {errors.form && <p className="form-err">{errors.form}</p>}
+          <button type="button" className="btn block" style={{ marginTop: 16 }} disabled={busy} onClick={requestAccess}>
+            {busy ? "Sending…" : `Request access for ${f.contactName.trim().split(/\s+/)[0] || "me"}`}
+          </button>
+          <p className="sub" style={{ marginTop: 12, fontSize: ".85rem" }}>
+            Or call us on <a href="tel:+260571403871">0571 403 871</a>. Not {existing.business}? Go back and check the business name.
+          </p>
+          <button type="button" className="back" onClick={() => { setErrors({}); setStep("register"); }}>← Back to business details</button>
+        </div>
+      )}
+
+      {step === "requested" && (
+        <div>
+          <span className="label">Request sent</span>
+          <h2>We'll be in touch</h2>
+          <p className="sub">
+            Our sales team has your request to order for {existing.business}. Once we've confirmed it with the business and added your number, come back here,
+            enter {phone} and set your PIN.
+          </p>
+          <button type="button" className="btn ghost block" style={{ marginTop: 16 }} onClick={back("phone")}>Back to sign in</button>
+        </div>
       )}
 
       {step === "register-pin" && (

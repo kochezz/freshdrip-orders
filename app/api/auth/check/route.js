@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { findAccountByPhone, findErpCustomerByPhone } from "@/lib/customers";
+import { sql } from "@/lib/db";
 import { nationalNumber } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,11 @@ export async function POST(req) {
     const account = await findAccountByPhone(`260${national}`);
     if (account) {
       if (!account.is_active) return NextResponse.json({ error: "This login is switched off. Call us on 0571 403 871." }, { status: 403 });
+      if (account.pin_hash === "RESET") {
+        // Staff reset the PIN: this number sets a new one.
+        const [c] = await sql()`SELECT trading_name FROM customers WHERE customer_id = ${account.customer_id}`;
+        return NextResponse.json({ state: "reset", business: c?.trading_name || "" });
+      }
       return NextResponse.json({ state: "account" });
     }
     const erp = await findErpCustomerByPhone(national);

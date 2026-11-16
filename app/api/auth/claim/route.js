@@ -19,7 +19,19 @@ export async function POST(req) {
   if (Object.keys(errors).length) return NextResponse.json({ errors }, { status: 422 });
 
   const phone = `260${national}`;
-  if (await findAccountByPhone(phone)) {
+  const existingLogin = await findAccountByPhone(phone);
+  if (existingLogin) {
+    // A PIN reset by staff: set the new PIN on the same login.
+    if (existingLogin.is_active && existingLogin.pin_hash === "RESET") {
+      await sql()`
+        UPDATE portal_accounts
+           SET pin_hash = ${hashPin(v.pin)}, contact_name = ${v.contactName}, email = COALESCE(${v.email || null}, email),
+               failed_attempts = 0, locked_until = NULL, last_login_at = now()
+         WHERE account_id = ${existingLogin.account_id} AND pin_hash = 'RESET'`;
+      const res = NextResponse.json({ ok: true });
+      setSessionCookie(res, existingLogin.account_id);
+      return res;
+    }
     return NextResponse.json({ error: "This number already has a login. Go back and sign in with your PIN." }, { status: 409 });
   }
   const erp = await findErpCustomerByPhone(national);
