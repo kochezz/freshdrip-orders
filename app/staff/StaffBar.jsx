@@ -10,7 +10,7 @@ export default function StaffBar({ current }) {
     <header className="bar">
       <div className="wrap">
         <a href="/staff" aria-label="Staff home">
-          <img src="/freshdrip-logo.png" alt="freshDrip" width="40" height="30" />
+          <img src="/freshdrip-logo.png" alt="freshDrip" width="38" height="30" />
         </a>
         <div className="who" style={{ marginLeft: 12, marginRight: "auto", textAlign: "left" }}>
           <b>Wholesale</b>Staff view

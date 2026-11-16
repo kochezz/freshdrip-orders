@@ -7,7 +7,7 @@ export default function TopBar({ session, current }) {
       <header className="bar">
         <div className="wrap">
           <a href="/shop" aria-label="freshDrip wholesale home">
-            <img src="/freshdrip-logo.png" alt="freshDrip" width="40" height="30" />
+            <img src="/freshdrip-logo.png" alt="freshDrip" width="38" height="30" />
           </a>
           <div className="who">
             <b>{session.trading_name}</b>

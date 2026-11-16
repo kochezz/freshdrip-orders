@@ -14,7 +14,7 @@ export default async function Home() {
           <span>Vilagio Trading Limited</span>
           <span>Wholesale</span>
         </div>
-        <img className="logo" src="/freshdrip-logo.png" alt="freshDrip" width="210" height="160" />
+        <img className="logo" src="/freshdrip-logo.png" alt="freshDrip" width="210" height="165" />
         <h1>Order freshDrip by the pack. Track it to your door.</h1>
         <p className="lede">Wholesale ordering for shops, distributors, offices and sites across Zambia. Pure natural spring water from Chingola.</p>
         <img className="bottles" src="/products/fd-500ml-regular.webp" alt="" />
