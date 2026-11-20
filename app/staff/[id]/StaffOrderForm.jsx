@@ -1,20 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEmail, statuses }) {
-  const [f, setF] = useState({ status, deliveryFee: fee == null ? "" : String(fee), note: "", notify: true, staffName: "" });
+export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEmail, statuses, held, sold, locations = [] }) {
+  const [f, setF] = useState({ status, deliveryFee: fee == null ? "" : String(fee), note: "", notify: true, locationId: locations[0]?.id || "" });
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // Remember who is updating on this computer.
-  useEffect(() => {
-    try {
-      const n = localStorage.getItem("fd-staff-name");
-      if (n) setF((x) => ({ ...x, staffName: n }));
-    } catch {}
-  }, []);
+  const needsStore = !held && !sold && ["confirmed", "ready"].includes(f.status) && f.status !== status;
 
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
@@ -22,18 +16,16 @@ export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEm
     e.preventDefault();
     setErr(null);
     setMsg(null);
-    if (!f.staffName.trim()) return setErr("Enter your name so the history shows who made the change.");
+    if (needsStore && !f.locationId) return setErr("Pick the store the stock will come from.");
     setBusy(true);
     try {
-      try {
-        localStorage.setItem("fd-staff-name", f.staffName.trim());
-      } catch {}
       const res = await fetch(`/api/staff/orders/${orderId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(f),
       });
       const data = await res.json().catch(() => ({}));
+      if (res.status === 401) return window.location.assign(`/staff/login?next=/staff/${orderId}`);
       if (!res.ok) return setErr(data.error || "Couldn't save. Try again.");
       setMsg(data.emailed ? "Saved. The customer has been emailed." : "Saved.");
       setTimeout(() => window.location.reload(), 900);
@@ -52,6 +44,14 @@ export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEm
           {statuses.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
         </select>
       </label>
+      {needsStore && (
+        <label className="field">
+          <span>Hold stock from</span>
+          <select value={f.locationId} onChange={set("locationId")}>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
+          </select>
+        </label>
+      )}
       {fulfilment === "delivery" && (
         <label className="field">
           <span>Delivery fee, Kwacha <i>(0 for free delivery)</i></span>
@@ -61,10 +61,6 @@ export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEm
       <label className="field">
         <span>Message to the customer <i>(optional, shown on their order)</i></span>
         <textarea value={f.note} onChange={set("note")} placeholder="e.g. Delivery Thursday morning, driver will call ahead." />
-      </label>
-      <label className="field">
-        <span>Your name</span>
-        <input value={f.staffName} onChange={set("staffName")} placeholder="e.g. Emmanuel" />
       </label>
       <label className="check">
         <input type="checkbox" checked={f.notify && hasEmail} disabled={!hasEmail} onChange={set("notify")} />

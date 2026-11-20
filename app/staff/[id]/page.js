@@ -21,10 +21,29 @@ export default async function StaffOrder({ params }) {
       LEFT JOIN portal_accounts a ON a.account_id = o.account_id
      WHERE o.order_id = ${params.id}`;
   if (!order) notFound();
-  const [lines, events] = await Promise.all([
+  const [lines, events, held, sale, locations] = await Promise.all([
     db`SELECT * FROM portal_order_lines WHERE order_id = ${order.order_id} ORDER BY line_total_zmw DESC`,
     db`SELECT * FROM portal_order_events WHERE order_id = ${order.order_id} ORDER BY created_at DESC`,
+    db`SELECT a.quantity, a.created_at, p.product_name, l.location_code, l.location_name
+         FROM portal_order_allocations a
+         JOIN products p ON p.product_id = a.product_id
+         JOIN warehouse_locations l ON l.location_id = a.location_id
+        WHERE a.order_id = ${order.order_id} AND a.released_at IS NULL`,
+    db`SELECT st.receipt_number, st.transaction_date, st.total_amount_zmw, dn.dn_id, dn.dn_number
+         FROM portal_orders o
+         LEFT JOIN sales_transactions st ON st.transaction_id = o.transaction_id
+         LEFT JOIN delivery_notes dn ON dn.dn_id = o.delivery_note_id
+        WHERE o.order_id = ${order.order_id} AND o.transaction_id IS NOT NULL`,
+    db`SELECT l.location_id, l.location_code, l.location_name, COALESCE(SUM(i.quantity_available), 0)::int AS units
+         FROM warehouse_locations l
+         LEFT JOIN inventory i ON i.location_id = l.location_id
+              AND i.product_id IN (SELECT product_id FROM portal_order_lines WHERE order_id = ${order.order_id})
+        WHERE l.location_type <> 'quarantine' AND COALESCE(l.is_active, true)
+        GROUP BY l.location_id, l.location_code, l.location_name
+       HAVING COALESCE(SUM(i.quantity_available), 0) > 0 OR l.location_code = 'WH-FG-01'
+        ORDER BY (l.location_code = 'WH-FG-01') DESC, units DESC`,
   ]);
+  const sold = sale[0] || null;
   const fee = order.delivery_fee_zmw == null ? null : Number(order.delivery_fee_zmw);
 
   return (
@@ -83,6 +102,30 @@ export default async function StaffOrder({ params }) {
           </div>
           <div style={{ display: "grid", gap: 16 }}>
             <section className="panel">
+              <h2>Stock &amp; dispatch</h2>
+              {sold ? (
+                <dl className="kv">
+                  <dt>Sale</dt><dd>{sold.receipt_number} · {kwacha(sold.total_amount_zmw)} · {fmt(sold.transaction_date)}</dd>
+                  <dt>Delivery note</dt>
+                  <dd>{sold.dn_id ? <a href={`/api/staff/erp/field-sales/delivery-notes/${sold.dn_id}/pdf`} target="_blank" rel="noopener">{sold.dn_number} · print</a> : <a href={`/staff/sell?order=${order.order_id}`}>Issue the delivery note</a>}</dd>
+                </dl>
+              ) : (
+                <>
+                  {held.length ? (
+                    <ul className="lines" style={{ margin: "0 0 12px" }}>
+                      {held.map((h, i) => <li key={i}>{Number(h.quantity).toLocaleString()} × {h.product_name} held at {h.location_code}</li>)}
+                    </ul>
+                  ) : (
+                    <p className="muted" style={{ marginTop: 0 }}>No stock held yet. Confirming the order holds it at the store you pick.</p>
+                  )}
+                  {order.status !== "cancelled" && (
+                    <a className="btn block" href={`/staff/sell?order=${order.order_id}`}>Sell &amp; dispatch</a>
+                  )}
+                  <p className="muted" style={{ fontSize: ".82rem" }}>Records the sale in the ERP (takes the stock out, payment on dispatch) and prints the delivery note for signing.</p>
+                </>
+              )}
+            </section>
+            <section className="panel">
               <h2>Update</h2>
               <StaffOrderForm
                 orderId={order.order_id}
@@ -90,6 +133,9 @@ export default async function StaffOrder({ params }) {
                 fee={fee}
                 fulfilment={order.fulfilment}
                 hasEmail={!!order.email}
+                held={held.length > 0}
+                sold={!!sold}
+                locations={locations.map((l) => ({ id: l.location_id, label: `${l.location_code} · ${l.location_name} (${l.units.toLocaleString()} units)` }))}
                 statuses={ALL_STATUS_KEYS.map((k) => ({ key: k, label: statusInfo(k).label }))}
               />
             </section>

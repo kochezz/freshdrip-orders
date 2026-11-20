@@ -14,7 +14,7 @@ export default function AccessForms(props) {
 }
 
 function AddContact({ customerId, business }) {
-  const [f, setF] = useState({ fullName: "", phone: "", position: "", staffName: "" });
+  const [f, setF] = useState({ fullName: "", phone: "", position: "" });
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -43,7 +43,6 @@ function AddContact({ customerId, business }) {
         <label className="field"><span>Mobile number</span><input value={f.phone} onChange={set("phone")} inputMode="tel" placeholder="0977 123 456" /></label>
         <label className="field"><span>Role <i>(optional)</i></span><input value={f.position} onChange={set("position")} placeholder="e.g. Shop manager" /></label>
       </div>
-      <label className="field"><span>Your name</span><input value={f.staffName} onChange={set("staffName")} placeholder="e.g. Kalasa" /></label>
       <p className="muted" style={{ fontSize: ".8rem", margin: "10px 0 0" }}>Only add a number after confirming with the customer's authorised contact. Whoever has this phone can order on {business}'s account.</p>
       {err && <p className="form-err">{err}</p>}
       {msg && <p className="okmsg">{msg}</p>}
