@@ -10,6 +10,7 @@ export default async function StaffBar({ current }) {
   const tabs = [
     SELLER_ROLES.includes(role) && { key: "sell", href: "/staff/sell", label: "Sell" },
     { key: "orders", href: "/staff", label: "Orders" },
+    { key: "sales", href: "/staff/sales", label: "Sales" },
     { key: "approvals", href: "/staff/approvals", label: APPROVER_ROLES.includes(role) ? "Approvals" : "Discounts" },
     { key: "notes", href: "/staff/notes", label: "Delivery notes" },
     { key: "insights", href: "/staff/insights", label: "Insights" },
