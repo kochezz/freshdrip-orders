@@ -50,6 +50,9 @@ export default async function Staff({ searchParams }) {
           <div className="kpi"><span>Portal customers</span><b>{accounts[0].n}</b><span style={{ letterSpacing: 0, textTransform: "none" }}>{accounts[0].pending} awaiting ERP approval</span></div>
         </div>
 
+        <p className="muted" style={{ margin: "0 0 10px", fontSize: ".88rem" }}>
+          These are orders customers placed on the portal. Sales made on the phone or at the ERP till are under <a href="/staff/sales">Sales</a>.
+        </p>
         <nav className="tabs" aria-label="Filter orders">
           {VIEWS.map((v) => (
             <a key={v.key} href={`/staff?view=${v.key}`} aria-current={v.key === view ? "true" : undefined}>{v.label}</a>

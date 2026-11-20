@@ -578,6 +578,7 @@ function AfterSale({ sale, order, wholesale, walkin, cust, custMode }) {
 
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <a className="btn ghost" href="/staff/sell">New sale</a>
+        <a className="btn ghost" href="/staff/sales?period=today">Today&rsquo;s sales</a>
         {order && <a className="btn ghost" href={`/staff/${order.order_id}`}>Back to the order</a>}
       </div>
     </div>
