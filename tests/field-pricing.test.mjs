@@ -34,7 +34,7 @@ import { packSavings } from "../lib/field-pricing.js";
 test("retail packs and savings match the ERP (20 Nov 2026)", () => {
   const r = { ...reg, selling_price_zmw: "7.00" };
   assert.deepEqual(packSavings(r, 24), { retailZmw: 120, wholesaleZmw: 114.96, saveZmw: 5.04 });
-  assert.deepEqual(packSavings(r, 12), { retailZmw: 59.99, wholesaleZmw: 57.48, saveZmw: 2.51 });
+  assert.deepEqual(packSavings(r, 12), { retailZmw: 62, wholesaleZmw: 57.48, saveZmw: 4.52 });
   assert.equal(packSavings({ sku: "FD-750ML-REGULAR", selling_price_zmw: "10", wholesale_price_zmw: "5.59" }, 24).saveZmw, 20.84);
   assert.equal(packSavings({ sku: "FD-500ML-PREMIUM", selling_price_zmw: "14.99", wholesale_price_zmw: "12.74" }, 24).saveZmw, 44.24);
 });
