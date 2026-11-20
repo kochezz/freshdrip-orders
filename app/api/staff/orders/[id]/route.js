@@ -2,15 +2,24 @@ import { NextResponse } from "next/server";
 import { ALL_STATUS_KEYS } from "@/lib/config";
 import { sql } from "@/lib/db";
 import { sendStatusUpdate } from "@/lib/email";
+import { erpJson } from "@/lib/erp";
+import { currentStaff } from "@/lib/staff-req";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // Staff update an order: status, delivery fee, a note for the customer.
-// Protected by middleware.js (STAFF_PASSWORD).
+// Stock follows the status (through the ERP, as the signed-in person):
+//   confirmed            -> stock held at the chosen location
+//   submitted/cancelled  -> held stock released
+//   dispatched/delivered -> only once the sale is recorded (Sell & dispatch),
+//                           which deducts the stock and issues the delivery note
 export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
   const status = String(body.status || "");
-  const staffName = String(body.staffName || "").trim().slice(0, 40) || "staff";
+  const staff = currentStaff();
+  const staffName = staff?.name || "staff";
   const note = String(body.note || "").trim().slice(0, 1000);
   const notify = body.notify !== false;
   let fee = null;
@@ -26,6 +35,28 @@ export async function POST(req, { params }) {
   if (!current) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
   const statusChanged = current.status !== status;
+
+  if (statusChanged) {
+    const [{ held }] = await db`SELECT COUNT(*)::int AS held FROM portal_order_allocations WHERE order_id = ${params.id} AND released_at IS NULL`;
+    const [{ transaction_id: txId }] = await db`SELECT transaction_id FROM portal_orders WHERE order_id = ${params.id}`;
+    if (["cancelled", "submitted"].includes(status) && txId) {
+      return NextResponse.json({ error: "This order already has a sale recorded. Void the receipt in the ERP first." }, { status: 422 });
+    }
+    try {
+      if (["confirmed", "ready"].includes(status) && !held && !txId) {
+        const locationId = String(body.locationId || "");
+        if (!/^[0-9a-f-]{36}$/i.test(locationId)) return NextResponse.json({ error: "Pick the store the stock will come from." }, { status: 422 });
+        await erpJson(`/field-sales/portal-orders/${params.id}/reserve`, { method: "POST", body: { location_id: locationId } });
+      } else if (["submitted", "cancelled"].includes(status) && held) {
+        await erpJson(`/field-sales/portal-orders/${params.id}/release`, { method: "POST", body: {} });
+      } else if (["dispatched", "delivered"].includes(status) && !txId) {
+        return NextResponse.json({ error: "Record the sale first with \u201cSell & dispatch\u201d: it takes the stock out and prints the delivery note." }, { status: 422 });
+      }
+    } catch (e) {
+      if (e.status === 401) return NextResponse.json({ error: "Your session has ended. Sign in again." }, { status: 401 });
+      return NextResponse.json({ error: e.message || "The ERP did not accept the stock change." }, { status: e.status && e.status < 500 ? e.status : 502 });
+    }
+  }
   const oldFee = current.delivery_fee_zmw == null ? null : Number(current.delivery_fee_zmw);
   const feeChanged = oldFee !== fee;
   if (!statusChanged && !feeChanged && !note) return NextResponse.json({ error: "Nothing to save." }, { status: 422 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { findAccountByPhone, findErpCustomerByPhone } from "@/lib/customers";
 import { sql } from "@/lib/db";
 import { displayPhone, nationalNumber } from "@/lib/phone";
+import { currentStaff } from "@/lib/staff-req";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ const clean = (s, max) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, m
 const isId = (s) => /^[0-9a-f-]{36}$/i.test(String(s || ""));
 
 // Staff manage who can order for a customer. Protected by middleware.js.
-//   add-contact  {customerId, fullName, phone, position?, staffName}
+//   add-contact  {customerId, fullName, phone, position?} (added by the signed-in staff member)
 //   reset-pin    {accountId}  next sign-in with that number sets a new PIN
 //   deactivate / activate {accountId}
 export async function POST(req) {
@@ -19,12 +20,11 @@ export async function POST(req) {
   if (b.action === "add-contact") {
     const fullName = clean(b.fullName, 120);
     const position = clean(b.position, 80) || "Portal user";
-    const staffName = clean(b.staffName, 40);
+    const staffName = clean(currentStaff()?.name, 40) || "staff";
     const national = nationalNumber(b.phone);
     if (!isId(b.customerId)) return NextResponse.json({ error: "Unknown customer." }, { status: 422 });
     if (fullName.length < 2) return NextResponse.json({ error: "Enter their name." }, { status: 422 });
     if (!national) return NextResponse.json({ error: "Enter a Zambian mobile number, e.g. 0977 123 456." }, { status: 422 });
-    if (!staffName) return NextResponse.json({ error: "Enter your name so we know who added this contact." }, { status: 422 });
     const [cust] = await db`SELECT customer_id, trading_name FROM customers WHERE customer_id = ${b.customerId}`;
     if (!cust) return NextResponse.json({ error: "Unknown customer." }, { status: 404 });
     if (await findAccountByPhone(`260${national}`)) {
