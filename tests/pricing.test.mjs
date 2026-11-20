@@ -25,7 +25,7 @@ test("catalogue: pack prices from ERP unit price; 12-pack = half a 24 + 5% (Regu
   // fixed retail packs (20 Nov 2026) for the "save vs retail" line
   assert.equal(prem24.retailPackPrice, 350);
   assert.equal(reg24.retailPackPrice, 120);
-  assert.equal(reg12.retailPackPrice, 59.99);
+  assert.equal(reg12.retailPackPrice, 62);
   assert.ok(reg12.retailPackPrice > reg12.packPrice);
   assert.equal(c[2].sizes[0].packPrice, 18);
   assert.equal(c[3].sizes[0].packPrice, 52);
