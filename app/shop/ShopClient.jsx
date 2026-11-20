@@ -48,13 +48,15 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
       catalogue.flatMap((c) =>
         c.sizes
           .filter((z) => qty[z.key] > 0)
-          .map((z) => ({ key: z.key, name: c.name, image: c.image, packLabel: z.label, packPrice: z.packPrice, moqWeight: z.moqWeight, packs: qty[z.key], total: Math.round(z.packPrice * qty[z.key] * 100) / 100 }))
+          .map((z) => ({ key: z.key, name: c.name, image: c.image, packLabel: z.label, packPrice: z.packPrice, moqWeight: z.moqWeight, packs: qty[z.key], total: Math.round(z.packPrice * qty[z.key] * 100) / 100, retail: z.retailPackPrice > z.packPrice ? Math.round(z.retailPackPrice * qty[z.key] * 100) / 100 : Math.round(z.packPrice * qty[z.key] * 100) / 100 }))
       ),
     [catalogue, qty]
   );
   const totalPacks = lines.reduce((s, l) => s + l.packs, 0);
   const counted = Math.round(lines.reduce((s, l) => s + l.packs * l.moqWeight, 0) * 10) / 10;
   const subtotal = Math.round(lines.reduce((s, l) => s + l.total, 0) * 100) / 100;
+  // What the same basket costs at retail: the wholesale saving, shown as a selling point.
+  const saving = Math.round((lines.reduce((s, l) => s + l.retail, 0) - subtotal) * 100) / 100;
   const short = Math.max(0, Math.round((minPacks - counted) * 10) / 10);
   const ready = counted >= minPacks;
   const shortText = `${short} more pack${short === 1 ? "" : "s"} of 24 (or ${Math.ceil(short * 2)} of 12)`;
@@ -162,6 +164,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
                             <b>{K(z.packPrice)}</b>
                             <span>per pack{z.perPack > 1 ? ` · ${K(z.perUnit)} each` : ""}</span>
                             {z.retailPackPrice > z.packPrice && <s>{K(z.retailPackPrice)} retail</s>}
+                            {z.retailPackPrice > z.packPrice && <em className="save">Save {K(z.retailPackPrice - z.packPrice)} a pack</em>}
                           </div>
                           <div className="qty">
                             <button type="button" aria-label={`One fewer ${z.label} of ${c.name}`} onClick={() => add(z.key, -1)}>−</button>
@@ -216,7 +219,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
             </div>
             <div className="total">
               <b>{K(subtotal)}</b>
-              <span>excl. delivery</span>
+              <span>{saving > 0 ? `save ${K(saving)} vs retail · ` : ""}excl. delivery</span>
             </div>
             <button className="btn" disabled={!ready} onClick={() => { setErrors({}); setView("checkout"); }}>
               Review order
@@ -303,6 +306,7 @@ export default function ShopClient({ accountId, catalogue, minPacks, outlet, def
               <div><span>Packs</span><b>{totalPacks}{counted !== totalPacks ? ` (counts as ${counted})` : ""}</b></div>
               <div><span>Delivery</span><span>{form.fulfilment === "delivery" ? "Quoted when we confirm" : "Collection, no charge"}</span></div>
               <div className="big"><span>Estimated total</span><b>{K(subtotal)}</b></div>
+              {saving > 0 && <div className="saving"><span>You save vs retail</span><b>{K(saving)}</b></div>}
               <span className="muted" style={{ fontSize: ".78rem" }}>
                 Wholesale prices, ex-works. This is an order request: we confirm the final price, delivery and payment terms before dispatch.
               </span>
