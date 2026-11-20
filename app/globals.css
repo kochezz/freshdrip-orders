@@ -346,7 +346,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pos .panel { margin-top: 14px; }
 .pos-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
 .pos-side { position: sticky; top: 76px; }
-@media (max-width: 900px) { .pos-grid { grid-template-columns: 1fr; } .pos-side { position: static; } }
+@media (max-width: 900px) { .pos-grid { grid-template-columns: minmax(0, 1fr); } .pos-side { position: static; } }
 .pos-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .pos-list > li { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
 .pos-prod { display: flex; gap: 10px; align-items: center; }
@@ -370,3 +370,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pos-lines { list-style: none; margin: 0 0 8px; padding: 0; font-size: .88rem; }
 .pos-lines li { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; }
 .pos-lines b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos-store { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .82rem; color: var(--muted); }
+.pos-store select { flex: 1; min-width: 0; width: 100%; text-overflow: ellipsis; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; color: var(--ink, #10203a); }
+.pos-save { font-style: normal; font-size: .72rem; color: #2f7d4f; }
+.pos-saving { color: #2f7d4f; }
+.pos-saving b { color: #2f7d4f; }
+.price em.save { flex-basis: 100%; font-style: normal; font-size: .76rem; font-weight: 600; color: #2f7d4f; }
+.sum .saving span, .sum .saving b { color: #2f7d4f; }

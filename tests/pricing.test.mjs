@@ -12,7 +12,7 @@ const erp = [
   { product_id: "p6", sku: "FD-5GAL-REFILL", is_active: true, selling_price_zmw: "65", wholesale_price_zmw: "52" },
 ];
 
-test("catalogue: pack prices from ERP unit price; 12-pack = half a 24 + 5%", () => {
+test("catalogue: pack prices from ERP unit price; 12-pack = half a 24 + 5% (Regular: no uplift)", () => {
   const c = buildCatalogue(erp);
   assert.deepEqual(c.map((x) => x.sku), ["FD-500ML-PREMIUM", "FD-500ML-REGULAR", "SACHET-WATER-500ML", "FD-5GAL-REFILL"]);
   const [prem24, prem12] = c[0].sizes;
@@ -20,8 +20,13 @@ test("catalogue: pack prices from ERP unit price; 12-pack = half a 24 + 5%", () 
   assert.equal(prem12.packPrice, 160.52); // 305.76 / 2 * 1.05 = 160.524
   const [reg24, reg12] = c[1].sizes;
   assert.equal(reg24.packPrice, 114.96);
-  assert.equal(reg12.packPrice, 60.35); // 114.96 / 2 * 1.05 = 60.354
-  assert.ok(reg12.perUnit > reg24.perUnit);
+  assert.equal(reg12.packPrice, 57.48); // 114.96 / 2, below the K59.99 retail 12-pack
+  assert.ok(reg12.perUnit >= reg24.perUnit);
+  // fixed retail packs (20 Nov 2026) for the "save vs retail" line
+  assert.equal(prem24.retailPackPrice, 350);
+  assert.equal(reg24.retailPackPrice, 120);
+  assert.equal(reg12.retailPackPrice, 59.99);
+  assert.ok(reg12.retailPackPrice > reg12.packPrice);
   assert.equal(c[2].sizes[0].packPrice, 18);
   assert.equal(c[3].sizes[0].packPrice, 52);
 });
@@ -43,7 +48,7 @@ test("basket: server prices, merges duplicates, 12-packs count half toward 20", 
   assert.equal(ok.totalPacks, 21);
   assert.equal(ok.moqPacks, 20);
   assert.equal(ok.lines[0].packs, 15);
-  assert.equal(ok.subtotal, 2053.1);
+  assert.equal(ok.subtotal, 2047.36); // 15 x 114.96 + 2 x 57.48 + 4 x 52
 });
 
 test("basket: rejects unknown or hidden products and junk quantities", () => {

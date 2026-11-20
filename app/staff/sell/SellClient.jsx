@@ -1,12 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { priceCart, round2 } from "@/lib/field-pricing";
+import { priceCart, round2, packSavings } from "@/lib/field-pricing";
 
 const ERP = "/api/staff/erp";
 const K = (n) => `K${Number(n || 0).toLocaleString("en-ZM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const short = (n) => String(n || "").replace(/^FreshDrip\s*/i, "").replace(/\s*Bottled Water$/i, "");
 const sizeLabel = (n) => (n == null ? "Unit" : n === 1 ? "Bottle" : n === 18 ? "Pack of 18" : `${n}-pack`);
 const DEFAULT_LOC = "WH-FG-01";
+
+// Same rule as assigning materials to a production batch: the store with
+// enough free stock for the need, else the one with the most (ties go to the
+// main finished-goods store).
+function bestStore(stores, need) {
+  const byFree = [...stores].sort((a, b) => b.free - a.free || (a.code === DEFAULT_LOC ? -1 : b.code === DEFAULT_LOC ? 1 : 0));
+  return byFree.find((x) => x.free >= need) || byFree[0];
+}
 
 async function call(path, opts = {}) {
   const res = await fetch(`${ERP}/${path}`, {
@@ -27,7 +36,9 @@ export default function SellClient({ staff, order }) {
   const isOrder = !!order;
   const [catalogue, setCatalogue] = useState(null);
   const [loadErr, setLoadErr] = useState("");
-  const [locationId, setLocationId] = useState("");
+  // Store chosen by hand per product ({ productId: locationId }); otherwise
+  // each product defaults to the best store for the quantity in the cart.
+  const [picked, setPicked] = useState({});
 
   // cart: { "productId:packSize": packs }
   const [cart, setCart] = useState({});
@@ -64,26 +75,12 @@ export default function SellClient({ staff, order }) {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const locations = useMemo(() => {
-    const m = new Map();
-    for (const p of catalogue || []) for (const s of p.stock) {
-      const cur = m.get(s.location_id) || { id: s.location_id, code: s.location_code, name: s.location_name, units: 0 };
-      cur.units += s.available;
-      m.set(s.location_id, cur);
-    }
-    // A portal order's held stock counts as available to its own dispatch.
-    for (const h of order?.held || []) {
-      if (!m.has(h.location_id)) m.set(h.location_id, { id: h.location_id, code: "Held", name: "stock held for this order", units: 0 });
-      m.get(h.location_id).units += h.quantity;
-    }
-    return [...m.values()].sort((a, b) => (a.code === DEFAULT_LOC ? -1 : b.code === DEFAULT_LOC ? 1 : b.units - a.units));
-  }, [catalogue, order]);
-
-  // Default location: where the order's stock is held, else WH-FG-01.
-  useEffect(() => {
-    if (locationId || !locations.length) return;
-    setLocationId(order?.held?.[0]?.location_id || locations[0].id);
-  }, [locations, locationId, order]);
+  // Names of every store that appears in the catalogue's stock.
+  const storeNames = useMemo(() => {
+    const m = {};
+    for (const p of catalogue || []) for (const st of p.stock) m[st.location_id] = { code: st.location_code, name: st.location_name };
+    return m;
+  }, [catalogue]);
 
   // Prefill a portal order's lines once.
   const prefilled = useRef(false);
@@ -97,12 +94,20 @@ export default function SellClient({ staff, order }) {
 
   const byId = useMemo(() => Object.fromEntries((catalogue || []).map((p) => [p.product_id, p])), [catalogue]);
 
-  const available = useCallback((productId) => {
+  // Stores holding a product, with free units. A portal order's held stock
+  // counts as free for its own dispatch.
+  const storesFor = useCallback((productId) => {
     const p = byId[productId];
-    const fromStock = p?.stock.find((s) => s.location_id === locationId)?.available || 0;
-    const held = (order?.held || []).filter((h) => h.product_id === productId && h.location_id === locationId).reduce((s, h) => s + h.quantity, 0);
-    return fromStock + held;
-  }, [byId, locationId, order]);
+    const m = new Map();
+    for (const st of p?.stock || []) m.set(st.location_id, { id: st.location_id, code: st.location_code, name: st.location_name, free: st.available });
+    for (const h of (order?.held || []).filter((x) => x.product_id === productId)) {
+      const cur = m.get(h.location_id) || { id: h.location_id, code: storeNames[h.location_id]?.code || "Held", name: storeNames[h.location_id]?.name || "held for this order", free: 0 };
+      cur.free += h.quantity;
+      cur.held = true;
+      m.set(h.location_id, cur);
+    }
+    return [...m.values()];
+  }, [byId, order, storeNames]);
 
   // ── Pricing preview ──────────────────────────────────────────────────────
   const customerTier = custMode === "erp" ? cust?.tier : custMode === "order" && order?.customer_status === "ACTIVE" ? order.tier : null;
@@ -118,9 +123,30 @@ export default function SellClient({ staff, order }) {
     .filter(Boolean);
   const totals = priceCart(cartLines, { customerTier, wholesale, discountPercent });
 
-  const shortBy = cartLines
-    .reduce((acc, l) => { acc[l.productId] = (acc[l.productId] || 0) + l.packSize * l.packs; return acc; }, {});
-  const shortages = Object.entries(shortBy).filter(([pid, units]) => units > available(pid)).map(([pid]) => byId[pid]?.product_name);
+  // Units of each product in the cart, the store each comes from, shortfalls.
+  const need = cartLines.reduce((acc, l) => { acc[l.productId] = (acc[l.productId] || 0) + l.packSize * l.packs; return acc; }, {});
+  const storeFor = (productId) => {
+    const stores = storesFor(productId);
+    if (!stores.length) return null;
+    const chosen = stores.find((x) => x.id === picked[productId]);
+    if (chosen) return chosen;
+    const held = stores.find((x) => x.held);
+    return held || bestStore(stores, need[productId] || 0);
+  };
+  const shortfalls = Object.entries(need).map(([pid, units]) => {
+    const st = storeFor(pid);
+    const free = st?.free || 0;
+    if (free >= units) return null;
+    const total = storesFor(pid).reduce((t, x) => t + Math.max(0, x.free), 0);
+    const name = short(byId[pid]?.product_name);
+    return { pid, text: st
+      ? `${name} needs ${units.toLocaleString()}, ${st.code} has ${free.toLocaleString()}${total > free ? ` (${total.toLocaleString()} across all stores: pick another store or sell less)` : ""}`
+      : `${name}: none in any store` };
+  }).filter(Boolean);
+
+  // Saving against the retail price of the same basket (marketing line).
+  const retailTotal = priceCart(cartLines, { customerTier: null, wholesale: false }).subtotal;
+  const vsRetail = round2(retailTotal - totals.total);
 
   const setPacks = (key, n) => setCart((c) => ({ ...c, [key]: Math.max(0, Math.min(9999, Math.floor(Number(n) || 0))) }));
 
@@ -186,8 +212,7 @@ export default function SellClient({ staff, order }) {
   async function complete() {
     setErr("");
     if (!totals.lines.length) return setErr("Add at least one product.");
-    if (!locationId) return setErr("Pick the store the stock comes from.");
-    if (shortages.length) return setErr(`Not enough stock at this store: ${shortages.join(", ")}.`);
+    if (shortfalls.length) return setErr(`Not enough stock: ${shortfalls.map((x) => x.text).join("; ")}.`);
     if (custMode === "erp" && !cust) return setErr("Pick the customer, or switch to walk-in.");
     if (wholesale && reason.trim().length < 5) return setErr("Say why this customer gets wholesale prices (e.g. standing order of 10 cases every 2 days).");
     const total = totals.total;
@@ -205,7 +230,7 @@ export default function SellClient({ staff, order }) {
       customer_id: custMode === "erp" ? cust.customer_id : orderCustomerActive ? order.customer_id : null,
       customer_name: customerName(),
       customer_phone: custMode === "walkin" ? walkin.phone.trim() || null : custMode === "order" ? order.phone || null : null,
-      lines: totals.lines.map((l) => ({ product_id: l.productId, location_id: locationId, quantity: l.packSize * l.packs, pack_size: l.sendPackSize })),
+      lines: totals.lines.map((l) => ({ product_id: l.productId, location_id: storeFor(l.productId).id, quantity: l.packSize * l.packs, pack_size: l.sendPackSize })),
       payment_method: m,
       amount_tendered_zmw: m === "cash" ? (pay.tendered === "" ? total : Number(pay.tendered)) : undefined,
       cash_amount_zmw: m === "mixed" ? Number(pay.cash || 0) : undefined,
@@ -313,12 +338,6 @@ export default function SellClient({ staff, order }) {
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Standing order, 10 cases every 2 days" />
             </label>
           )}
-          <label className="field">
-            <span>Stock from</span>
-            <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.code} · {l.name} ({l.units.toLocaleString()} units)</option>)}
-            </select>
-          </label>
         </section>
 
         {/* Products */}
@@ -327,26 +346,48 @@ export default function SellClient({ staff, order }) {
           <ul className="pos-list">
             {catalogue.map((p) => {
               const sizes = p.pack_sizes.length ? p.pack_sizes : [null];
-              const avail = available(p.product_id);
+              const stores = storesFor(p.product_id);
+              const total = stores.reduce((t, x) => t + Math.max(0, x.free), 0);
+              const want = need[p.product_id] || 0;
+              const st = storeFor(p.product_id);
+              const sf = shortfalls.find((x) => x.pid === p.product_id);
               return (
                 <li key={p.product_id}>
                   <div className="pos-prod">
                     {p.image_url && <img src={p.image_url} alt="" width="56" height="56" />}
                     <div>
-                      <b>{p.product_name.replace(/^FreshDrip\s*/i, "")}</b>
-                      <span className={avail ? "muted" : "form-err"}>{avail ? `${avail.toLocaleString()} units here` : "None at this store"}</span>
+                      <b>{short(p.product_name)}</b>
+                      <span className={total ? "muted" : "form-err"}>
+                        {total ? `${total.toLocaleString()} units in ${stores.length === 1 ? stores[0].code : `${stores.length} stores`}` : "Out of stock in every store"}
+                      </span>
                     </div>
                   </div>
+                  {stores.length > 0 && (want > 0 || stores.length > 1) && (
+                    <label className="pos-store">
+                      <span>From</span>
+                      <select value={st?.id || ""} onChange={(e) => setPicked((m) => ({ ...m, [p.product_id]: e.target.value }))}>
+                        {[...stores].sort((a, b) => b.free - a.free).map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.code} · {x.name} ({x.free.toLocaleString()} free){want ? (x.free >= want ? " ✓" : " ⚠ not enough") : ""}{x.held ? " · held" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {sf && <p className="form-err" style={{ margin: "6px 0 0", fontSize: ".82rem" }}>{sf.text}</p>}
                   {sizes.map((ps) => {
                     const key = `${p.product_id}:${ps}`;
                     const packs = cart[key] || 0;
-                    const preview = priceCart([{ product: p, packSize: ps ?? 1, packs: 1 }], { customerTier, wholesale }).lines[0];
+                    const preview = priceCart([{ product: p, packSize: ps ?? 1, packs: Math.max(1, packs) }], { customerTier, wholesale }).lines[0];
+                    const sv = packSavings(p, ps ?? 1);
                     return (
                       <div className="pos-size" key={key}>
                         <div>
                           <span>{sizeLabel(ps)}</span>
                           <b>{K(preview?.packZmw)}</b>
-                          {preview?.tier === "wholesale" && <i className="pos-ws">wholesale</i>}
+                          {preview?.tier === "wholesale"
+                            ? sv && <i className="pos-ws">wholesale · retail {K(sv.retailZmw)} · save {K(sv.saveZmw)}</i>
+                            : sv && <i className="pos-save">wholesale {K(sv.wholesaleZmw)} saves {K(sv.saveZmw)}</i>}
                         </div>
                         <div className="qty pos-qty">
                           <button type="button" onClick={() => setPacks(key, packs - 1)} aria-label="One fewer">−</button>
@@ -370,7 +411,7 @@ export default function SellClient({ staff, order }) {
           {totals.lines.length === 0 ? <p className="muted">Nothing added yet.</p> : (
             <ul className="pos-lines">
               {totals.lines.map((l) => (
-                <li key={l.key}><span>{l.packs} × {l.product.product_name.replace(/^FreshDrip\s*/i, "").replace(/\s*Bottled Water$/i, "")} {l.sendPackSize ? `(${sizeLabel(l.sendPackSize)})` : ""}</span><b>{K(l.totalZmw)}</b></li>
+                <li key={l.key}><span>{l.packs} × {short(l.product.product_name)} {l.sendPackSize ? `(${sizeLabel(l.sendPackSize)})` : ""}<small className="muted" style={{ display: "block" }}>from {storeFor(l.productId)?.code || "—"}</small></span><b>{K(l.totalZmw)}</b></li>
               ))}
             </ul>
           )}
@@ -378,8 +419,9 @@ export default function SellClient({ staff, order }) {
             <div><span>Subtotal</span><b>{K(totals.subtotal)}</b></div>
             {totals.discount > 0 && <div><span>Approved discount {Number(approval.percent)}% ({approval.approval_number})</span><b>−{K(totals.discount)}</b></div>}
             <div className="big"><span>To pay</span><b>{K(totals.total)}</b></div>
+            {vsRetail > 0.004 && <div className="pos-saving"><span>Customer saves vs retail</span><b>{K(vsRetail)}</b></div>}
           </div>
-          {shortages.length > 0 && <p className="form-err">Not enough at this store: {shortages.join(", ")}</p>}
+          {shortfalls.length > 0 && <p className="form-err">Not enough stock: {shortfalls.map((x) => x.text).join("; ")}</p>}
           {isOrder && order.delivery_fee_zmw ? <p className="muted" style={{ fontSize: ".82rem" }}>Delivery fee {K(order.delivery_fee_zmw)} quoted on the order is not part of this sale.</p> : null}
 
           <div style={{ marginTop: 12 }}>
