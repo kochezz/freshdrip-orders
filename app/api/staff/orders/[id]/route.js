@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ALL_STATUS_KEYS } from "@/lib/config";
+import { ALL_STATUS_KEYS, PICKUP_HOURS } from "@/lib/config";
 import { sql } from "@/lib/db";
 import { sendStatusUpdate } from "@/lib/email";
 import { erpJson } from "@/lib/erp";
@@ -73,7 +73,16 @@ export async function POST(req, { params }) {
   const eventNote = [feeChanged ? `Delivery fee set to K${fee == null ? "—" : fee.toFixed(2)}` : "", note].filter(Boolean).join(" · ") || null;
   const [rows] = await db.transaction([
     db`UPDATE portal_orders
-          SET status = ${status}, delivery_fee_zmw = ${fee}, staff_note = COALESCE(${note || null}, staff_note), updated_at = now()
+          SET status = ${status}, delivery_fee_zmw = ${fee}, staff_note = COALESCE(${note || null}, staff_note), updated_at = now(),
+              -- (SET expressions see the old row: "status" here is the old status)
+              ready_at = CASE WHEN ${status} = 'ready' AND status <> 'ready' THEN now() ELSE ready_at END,
+              collect_by = CASE
+                WHEN ${status} = 'ready' AND status <> 'ready' AND pickup_code IS NOT NULL AND transaction_id IS NULL
+                  THEN now() + (${PICKUP_HOURS}::int * interval '1 hour')
+                WHEN ${status} IN ('submitted', 'confirmed') THEN NULL
+                ELSE collect_by END,
+              cancelled_at = CASE WHEN ${status} = 'cancelled' AND status <> 'cancelled' THEN now() ELSE cancelled_at END,
+              cancel_reason = CASE WHEN ${status} = 'cancelled' AND status <> 'cancelled' THEN 'staff' ELSE cancel_reason END
         WHERE order_id = ${params.id}
         RETURNING *`,
     db`INSERT INTO portal_order_events (order_id, status, note, actor) VALUES (${params.id}, ${status}, ${eventNote}, ${`staff: ${staffName}`})`,

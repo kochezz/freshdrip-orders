@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import QRCode from "qrcode";
 import { getSession } from "@/lib/auth";
-import { MOBILE_MONEY, PICKUP_POINTS, statusInfo, statusInfoFor, statusesFor } from "@/lib/config";
+import { MOBILE_MONEY, PICKUP_HOURS, PICKUP_POINTS, PICKUP_RULE, statusInfo, statusInfoFor, statusesFor } from "@/lib/config";
 import { formatPickupCode, pickupUrl } from "@/lib/pickup";
 import MomoReference from "./MomoReference";
 import { sql } from "@/lib/db";
@@ -21,10 +21,16 @@ export default async function OrderDetail({ params }) {
   const db = sql();
   const [order] = await db`SELECT * FROM portal_orders WHERE order_no = ${params.no} AND (customer_id = ${session.customer_id} OR account_id = ${session.account_id})`;
   if (!order) notFound();
-  const [lines, events] = await Promise.all([
+  const [lines, events, saleRows] = await Promise.all([
     db`SELECT * FROM portal_order_lines WHERE order_id = ${order.order_id} ORDER BY line_total_zmw DESC`,
     db`SELECT status, note, created_at, actor FROM portal_order_events WHERE order_id = ${order.order_id} ORDER BY created_at`,
+    order.transaction_id
+      ? db`SELECT receipt_number, transaction_date, payment_method, payment_reference, status FROM sales_transactions WHERE transaction_id = ${order.transaction_id}`
+      : Promise.resolve([]),
   ]);
+  // Paid = the order's ERP sale exists (recorded when staff confirm an
+  // Airtel Money payment, or at hand-over).
+  const sale = saleRows[0] && saleRows[0].status === "completed" ? saleRows[0] : null;
 
   const cancelled = order.status === "cancelled";
   const STATUSES = statusesFor(order.fulfilment);
@@ -72,7 +78,35 @@ export default async function OrderDetail({ params }) {
                 <div className="qr" aria-label={`QR code for pickup ${formatPickupCode(order.pickup_code)}`} dangerouslySetInnerHTML={{ __html: qrSvg }} />
               </section>
             )}
-            {order.payment_method === "mobile_money" && !collected && !cancelled && (
+            {order.fulfilment === "collect" && !cancelled && (
+              sale ? (
+                <div className="paybanner paid">
+                  <b>Paid · {kwacha(order.subtotal_zmw)}</b>
+                  <span>
+                    {sale.payment_method === "mobile" ? MOBILE_MONEY.provider : sale.payment_method === "card" ? "Card" : "Cash"}
+                    {sale.payment_reference ? `, ref ${sale.payment_reference}` : ""} · {fmt(sale.transaction_date)} · receipt {sale.receipt_number}
+                  </span>
+                  <a href={`/orders/${encodeURIComponent(order.order_no)}/receipt`} target="_blank" rel="noopener">View and download your receipt</a>
+                </div>
+              ) : !collected && (
+                <div className={`paybanner ${order.collect_by && new Date(order.collect_by) < new Date() ? "late" : "due"}`}>
+                  <b>Not paid yet · {kwacha(order.subtotal_zmw)}</b>
+                  <span>
+                    {order.collect_by
+                      ? <>Pay and collect by <b>{fmt(order.collect_by)}</b>. If it isn't paid and collected by then, the order is cancelled automatically and the stock goes back on sale.</>
+                      : <>{PICKUP_RULE}</>}
+                  </span>
+                  {order.momo_reference && <span>You reported {MOBILE_MONEY.provider} transaction <b>{order.momo_reference}</b>. We'll mark the order paid once we've checked it.</span>}
+                </div>
+              )
+            )}
+            {cancelled && order.cancel_reason === "not_collected_48h" && (
+              <div className="paybanner late">
+                <b>Cancelled: not collected in time</b>
+                <span>The order wasn't paid for and collected within {PICKUP_HOURS} hours of being ready, so the stock went back on sale. Nothing is owed. You can order again any time.</span>
+              </div>
+            )}
+            {order.payment_method === "mobile_money" && !sale && !collected && !cancelled && (
               <section className="panel">
                 <h2>Payment by {MOBILE_MONEY.provider}</h2>
                 <p style={{ marginTop: 0 }}>
@@ -80,7 +114,7 @@ export default async function OrderDetail({ params }) {
                   Use <b>{order.order_no}</b> as the reference.
                 </p>
                 <MomoReference orderNo={order.order_no} current={order.momo_reference} />
-                <p className="muted" style={{ fontSize: ".82rem", marginBottom: 0 }}>The counter checks the payment before handing over. You can also pay when you collect.</p>
+                <p className="muted" style={{ fontSize: ".82rem", marginBottom: 0 }}>We check the payment in our wallet, then this page shows <b>Paid</b> and your receipt. You can also pay when you collect.</p>
               </section>
             )}
             <section className="panel">
@@ -117,6 +151,8 @@ export default async function OrderDetail({ params }) {
                 <dt>{order.fulfilment === "collect" ? "Collection" : "Deliver to"}</dt>
                 <dd>{order.fulfilment === "collect" ? (pp ? `${pp.label}, ${pp.address}` : "Factory, Kitwe Road, Chingola") : [order.delivery_address, order.delivery_town].filter(Boolean).join(", ")}</dd>
                 {order.fulfilment === "collect" && (<><dt>Payment</dt><dd>{order.payment_method === "mobile_money" ? `${MOBILE_MONEY.provider}${order.momo_reference ? ` · ref ${order.momo_reference}` : ""}` : "When you collect"}</dd></>)}
+                {order.collect_by && !sale && !cancelled && (<><dt>Collect by</dt><dd>{fmt(order.collect_by)}</dd></>)}
+                {sale && (<><dt>Receipt</dt><dd><a href={`/orders/${encodeURIComponent(order.order_no)}/receipt`} target="_blank" rel="noopener">{sale.receipt_number}</a></dd></>)}
                 {order.picked_up_at && (<><dt>Collected</dt><dd>{fmt(order.picked_up_at)}</dd></>)}
                 {order.preferred_date && (<><dt>Needed by</dt><dd>{new Date(order.preferred_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</dd></>)}
                 {order.po_number && (<><dt>PO number</dt><dd>{order.po_number}</dd></>)}

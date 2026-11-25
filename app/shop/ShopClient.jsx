@@ -10,7 +10,7 @@ const num = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 // Retail for any quantity; wholesale switches on per product family once the
 // basket reaches its threshold (lib/config.js FAMILIES). Prices shown here are
 // a preview: the server re-prices every order the same way.
-export default function ShopClient({ accountId, catalogue, families, pickupPoints, mobileMoney, isRetailAccount, defaultAddress, defaultTown, initialBasket, reorderNo }) {
+export default function ShopClient({ accountId, catalogue, families, pickupPoints, mobileMoney, pickupRule, isRetailAccount, defaultAddress, defaultTown, initialBasket, reorderNo }) {
   const storeKey = `fd-basket-v2-${accountId}`;
   const [qty, setQty] = useState(initialBasket || {});
   const [loaded, setLoaded] = useState(!!initialBasket);
@@ -106,7 +106,7 @@ export default function ShopClient({ accountId, catalogue, families, pickupPoint
           <h1>Thank you. We have your order.</h1>
           <p className="muted">
             {placed.fulfilment === "collect"
-              ? `We'll get it ready at ${pp?.label}. Your order page has a pickup QR code: show it at the counter when you collect.`
+              ? `We'll get it ready at ${pp?.label} and tell you when it's ready. Your order page has a pickup QR code: show it at the counter when you collect.`
               : "Our sales team will call to confirm quantities, the delivery cost and timing."}{" "}
             You can follow every step under My orders.
           </p>
@@ -115,10 +115,11 @@ export default function ShopClient({ accountId, catalogue, families, pickupPoint
             <b>{placed.orderNo}</b>
             <span>{placed.totalPacks} packs · {K(placed.subtotal)}</span>
           </div>
+          {placed.fulfilment === "collect" && <p className="rule" style={{ textAlign: "left" }}><b>Important:</b> {pickupRule}</p>}
           {placed.payment === "mobile_money" && (
             <div className="notice" style={{ textAlign: "left" }}>
               Pay <b>{K(placed.subtotal)}</b> by {mobileMoney.provider} to <b>{mobileMoney.number}</b> (registered name <b>{mobileMoney.name}</b>), using <b>{placed.orderNo}</b> as the reference.
-              Then add the transaction ID on your order page so the counter can check it.
+              Then add the transaction ID on your order page. Once we've checked it, your order shows <b>Paid</b> with a receipt to download, and it won't be cancelled.
             </div>
           )}
           <div className="actions">
@@ -380,11 +381,12 @@ export default function ShopClient({ accountId, catalogue, families, pickupPoint
               {basket.saving > 0 && <div className="saving"><span>You save vs retail</span><b>{K(basket.saving)}</b></div>}
               <span className="muted" style={{ fontSize: ".78rem" }}>
                 {fulfilment === "collect"
-                  ? "We hold the stock once we confirm your order. Show the pickup QR code from your order page when you collect."
+                  ? "We hold the stock once your order is ready. Show the pickup QR code from your order page when you collect."
                   : "This is an order request: we confirm the final price, delivery and payment before dispatch."}
               </span>
             </div>
 
+            {fulfilment === "collect" && <p className="rule"><b>Before you order:</b> {pickupRule} Paying by {mobileMoney.provider} in advance keeps your order safe.</p>}
             {errors.basket && <p className="form-err">{errors.basket}</p>}
             {errors.form && <p className="form-err">{errors.form}</p>}
             <button className="btn block" style={{ marginTop: 18 }} disabled={busy || !hasLines}>

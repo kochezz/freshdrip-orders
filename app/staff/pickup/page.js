@@ -29,7 +29,8 @@ export default async function Pickups({ searchParams }) {
   const showDone = searchParams?.done === "1";
   const orders = points.length ? await db.query(
     `SELECT o.order_id, o.order_no, o.status, o.created_at, o.preferred_date, o.pickup_point, o.pickup_code, o.subtotal_zmw,
-            o.total_packs, o.pricing, o.payment_method, o.momo_reference, o.picked_up_at,
+            o.total_packs, o.pricing, o.payment_method, o.momo_reference, o.picked_up_at, o.collect_by,
+            (o.transaction_id IS NOT NULL) AS paid,
             COALESCE(c.trading_name, o.customer_name, a.contact_name) AS buyer, COALESCE(a.phone, o.customer_phone) AS phone,
             (SELECT count(*) FROM portal_order_allocations x WHERE x.order_id = o.order_id AND x.released_at IS NULL)::int AS held
        FROM portal_orders o
@@ -37,7 +38,7 @@ export default async function Pickups({ searchParams }) {
        LEFT JOIN portal_accounts a ON a.account_id = o.account_id
       WHERE o.fulfilment = 'collect' AND o.pickup_point = ANY($1)
         AND ${showDone ? "o.status = 'delivered' AND o.picked_up_at > now() - interval '14 days'" : "o.status NOT IN ('delivered', 'cancelled')"}
-      ORDER BY ${showDone ? "o.picked_up_at DESC" : "(o.status = 'submitted') DESC, o.created_at"}
+      ORDER BY ${showDone ? "o.picked_up_at DESC" : "(o.momo_reference IS NOT NULL AND o.transaction_id IS NULL) DESC, (o.status = 'submitted') DESC, o.collect_by NULLS LAST, o.created_at"}
       LIMIT 200`, [points]) : [];
 
   return (
@@ -72,7 +73,13 @@ export default async function Pickups({ searchParams }) {
                       <b>{o.buyer}</b>
                       <div className="muted" style={{ fontSize: ".84rem" }}>{o.order_no} · {formatPickupCode(o.pickup_code)} · {PICKUP_POINTS[o.pickup_point]?.label}</div>
                     </div>
-                    <span className={`pill ${o.status}`}>{statusInfoFor("collect", o.status).label}</span>
+                    <span style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {o.paid ? <span className="pill delivered">Paid</span>
+                        : o.momo_reference ? <span className="pill new">Payment to check</span>
+                        : o.collect_by && new Date(o.collect_by) < new Date() ? <span className="pill cancelled">Overdue</span>
+                        : o.collect_by ? <span className="pill">Due {fmt(o.collect_by)}</span> : null}
+                      <span className={`pill ${o.status}`}>{statusInfoFor("collect", o.status).label}</span>
+                    </span>
                   </div>
                   <div className="muted" style={{ fontSize: ".84rem", marginTop: 6 }}>
                     {o.total_packs} packs · <b style={{ color: "inherit" }}>{kwacha(o.subtotal_zmw)}</b> · {o.pricing === "retail" ? "retail" : o.pricing === "mixed" ? "wholesale + retail" : "wholesale"} ·{" "}

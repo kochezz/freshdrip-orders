@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { loadCatalogue } from "@/lib/catalogue";
-import { FAMILIES, MOBILE_MONEY, PICKUP_POINTS } from "@/lib/config";
+import { FAMILIES, MOBILE_MONEY, PICKUP_RULE, PICKUP_POINTS } from "@/lib/config";
 import { sql } from "@/lib/db";
 import Footer from "../Footer";
 import TopBar from "../TopBar";
@@ -36,6 +36,7 @@ export default async function Shop({ searchParams }) {
         families={Object.fromEntries(Object.entries(FAMILIES).map(([k, f]) => [k, { key: k, ...f }]))}
         pickupPoints={Object.fromEntries(Object.entries(PICKUP_POINTS).map(([k, p]) => [k, { label: p.label, address: p.address, contact: p.contact }]))}
         mobileMoney={MOBILE_MONEY}
+        pickupRule={PICKUP_RULE}
         isRetailAccount={session.account_kind === "retail"}
         defaultAddress={locations[0]?.address || ""}
         defaultTown={locations[0]?.town || ""}

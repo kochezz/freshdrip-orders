@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Confirm the customer collected: records the sale in the ERP (stock out,
-// payment in) and closes the order. Safe to repeat: a second scan finds the
-// sale already recorded and only closes the order.
+// Confirm the customer collected: if unpaid, records the sale in the ERP
+// (stock out, payment in), then closes the order. Safe to repeat: a second
+// scan finds the sale already recorded and only closes the order.
 export async function POST(req, { params }) {
   const staff = currentStaff();
   const body = await req.json().catch(() => ({}));
@@ -22,11 +22,13 @@ export async function POST(req, { params }) {
   if (order.status === "delivered" && order.picked_up_at) {
     return NextResponse.json({ ok: true, already: true, receipt: order.receipt_number });
   }
-  if (order.payment_method === "mobile_money" && body.method === "mobile" && !body.momoChecked) {
-    return NextResponse.json({ error: "Check the Airtel Money payment has arrived, then tick the box." }, { status: 422 });
+  if (body.confirmed !== true) {
+    return NextResponse.json({ error: order.transaction_id
+      ? "Tick the box to confirm the customer has the goods."
+      : "Tick the box to confirm you received the full payment." }, { status: 422 });
   }
   try {
-    const r = await confirmPickup(db, found, staff, { method: body.method, tendered: body.tendered });
+    const r = await confirmPickup(db, found, staff, { method: body.method, tendered: body.tendered, reference: body.reference });
     return NextResponse.json({ ok: true, receipt: r.receipt });
   } catch (e) {
     if (e.status === 401) return NextResponse.json({ error: "Your session has ended. Sign in again." }, { status: 401 });

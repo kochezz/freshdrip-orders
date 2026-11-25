@@ -42,7 +42,13 @@ export default async function PickupOrder({ params }) {
               momoRef: o.momo_reference,
               collectedAt: o.picked_up_at,
               receipt: o.receipt_number,
+              paid: !!o.transaction_id && o.sale_status === "completed",
+              paidAt: o.paid_at,
+              paidMethod: o.paid_by_method,
+              paidRef: o.paid_ref,
+              collectBy: o.collect_by,
               cancelled: o.status === "cancelled",
+              cancelReason: o.cancel_reason,
             }}
             lines={found.lines.map((l) => ({ id: l.line_id, name: l.product_name, packs: l.packs, pack: l.pack_label, tier: l.price_tier, total: Number(l.line_total_zmw) }))}
             held={found.held.length > 0}
