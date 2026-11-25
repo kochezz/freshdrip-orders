@@ -115,7 +115,7 @@ export default function ShopClient({ accountId, catalogue, families, pickupPoint
             <b>{placed.orderNo}</b>
             <span>{placed.totalPacks} packs · {K(placed.subtotal)}</span>
           </div>
-          {placed.fulfilment === "collect" && <p className="rule" style={{ textAlign: "left" }}><b>Important:</b> {pickupRule}</p>}
+          {placed.fulfilment === "collect" && <p className="pickup-rule" style={{ textAlign: "left" }}><b>Important:</b> {pickupRule}</p>}
           {placed.payment === "mobile_money" && (
             <div className="notice" style={{ textAlign: "left" }}>
               Pay <b>{K(placed.subtotal)}</b> by {mobileMoney.provider} to <b>{mobileMoney.number}</b> (registered name <b>{mobileMoney.name}</b>), using <b>{placed.orderNo}</b> as the reference.
@@ -386,7 +386,7 @@ export default function ShopClient({ accountId, catalogue, families, pickupPoint
               </span>
             </div>
 
-            {fulfilment === "collect" && <p className="rule"><b>Before you order:</b> {pickupRule} Paying by {mobileMoney.provider} in advance keeps your order safe.</p>}
+            {fulfilment === "collect" && <p className="pickup-rule"><b>Before you order:</b> {pickupRule} Paying by {mobileMoney.provider} in advance keeps your order safe.</p>}
             {errors.basket && <p className="form-err">{errors.basket}</p>}
             {errors.form && <p className="form-err">{errors.form}</p>}
             <button className="btn block" style={{ marginTop: 18 }} disabled={busy || !hasLines}>

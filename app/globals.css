@@ -413,4 +413,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .paybanner.paid { background: #eaf6ee; border-color: #2f7d4f; color: #1d5134; }
 .paybanner.due { background: #fff8ea; border-color: #c98a1b; color: #6b4a0e; }
 .paybanner.late { background: #fdeceb; border-color: #b3261e; color: #7a1a14; }
-.rule { font-size: .86rem; padding: 10px 12px; border-left: 4px solid #c98a1b; background: #fff8ea; border-radius: 6px; }
+/* The 48-hour pickup rule notice (not .rule: that's the 1px gold divider) */
+.pickup-rule { display: block; height: auto; font-size: .86rem; line-height: 1.5; margin: 14px 0 0; padding: 10px 12px; border-left: 4px solid #c98a1b; background: #fff8ea; border-radius: 6px; text-align: left; }
