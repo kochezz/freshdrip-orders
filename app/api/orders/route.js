@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { loadCatalogue } from "@/lib/catalogue";
 import { PICKUP_POINTS } from "@/lib/config";
 import { sql } from "@/lib/db";
-import { sendOrderAlert, sendOrderReceipt } from "@/lib/email";
+import { sendOrderAlert, sendOrderReceipt, sendPaymentAlert } from "@/lib/email";
 import { newPickupCode } from "@/lib/pickup";
 import { priceBasket } from "@/lib/pricing";
 
@@ -105,7 +105,12 @@ export async function POST(req) {
   if (!order) return NextResponse.json({ error: "We couldn't place your order. Please try again." }, { status: 500 });
 
   // Emails are sent before replying so a serverless shutdown can't drop them.
-  await Promise.all([sendOrderAlert(order, order.lines, session), sendOrderReceipt(order, order.lines, session)]);
+  await Promise.all([
+    sendOrderAlert(order, order.lines, session),
+    sendOrderReceipt(order, order.lines, session),
+    // Paid by Airtel when ordering: ask Crystal Castle to check the wallet.
+    momoRef ? sendPaymentAlert({ ...order, buyer: session.trading_name || session.contact_name }, momoRef).catch(() => {}) : null,
+  ]);
 
   return NextResponse.json({ ok: true, orderNo: order.order_no });
 }

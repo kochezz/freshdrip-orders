@@ -159,7 +159,7 @@ export default function PickupClient({ code, order, lines, held, heldAt, mobileM
               <p className="muted" style={{ marginTop: 0 }}>
                 The customer chose to pay to {mobileMoney.number} ({mobileMoney.name}).
                 {order.momoRef ? <> They gave transaction ID <b>{order.momoRef}</b>.</> : " They haven't given a transaction ID yet."}{" "}
-                Open the wallet and find <b>{K(order.total)}</b> from this customer.
+                Open the wallet (the phone is kept at {mobileMoney.walletAt}) and find <b>{K(order.total)}</b> from this customer.
               </p>
               <label className="field">
                 <span>Transaction ID in the wallet</span>
