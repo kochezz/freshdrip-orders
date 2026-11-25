@@ -7,8 +7,9 @@ import SignOutStaff from "./SignOutStaff";
 export default async function StaffBar({ current }) {
   const staff = await getStaff();
   const role = staff?.role || "";
-  const tabs = [
+  const tabs = role === "counter" ? [{ key: "pickup", href: "/staff/pickup", label: "Pickups" }] : [
     SELLER_ROLES.includes(role) && { key: "sell", href: "/staff/sell", label: "Sell" },
+    { key: "pickup", href: "/staff/pickup", label: "Pickups" },
     { key: "orders", href: "/staff", label: "Orders" },
     { key: "sales", href: "/staff/sales", label: "Sales" },
     { key: "approvals", href: "/staff/approvals", label: APPROVER_ROLES.includes(role) ? "Approvals" : "Discounts" },
@@ -20,7 +21,7 @@ export default async function StaffBar({ current }) {
   return (
     <header className="bar staffbar">
       <div className="wrap">
-        <a href="/staff" aria-label="Staff home">
+        <a href={role === "counter" ? "/staff/pickup" : "/staff"} aria-label="Staff home">
           <img src="/freshdrip-logo.png" alt="freshDrip" width="38" height="30" />
         </a>
         <div className="who" style={{ marginLeft: 12, marginRight: "auto", textAlign: "left" }}>

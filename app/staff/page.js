@@ -23,9 +23,11 @@ export default async function Staff({ searchParams }) {
   const [orders, [k], accounts] = await Promise.all([
     db`SELECT o.order_id, o.order_no, o.status, o.created_at, o.total_packs, o.subtotal_zmw, o.delivery_fee_zmw,
               o.fulfilment, o.delivery_town, o.preferred_date, o.customer_status_at_order,
-              c.trading_name, c.status AS customer_status, a.contact_name, a.phone
+              o.pickup_point, o.pricing,
+              COALESCE(c.trading_name, o.customer_name) AS trading_name, COALESCE(c.status, 'RETAIL') AS customer_status,
+              COALESCE(a.contact_name, o.customer_name) AS contact_name, COALESCE(a.phone, o.customer_phone) AS phone
          FROM portal_orders o
-         JOIN customers c ON c.customer_id = o.customer_id
+         LEFT JOIN customers c ON c.customer_id = o.customer_id
          LEFT JOIN portal_accounts a ON a.account_id = o.account_id
         WHERE o.status = ANY(${statuses})
         ORDER BY (o.status = 'submitted') DESC, o.created_at DESC
@@ -36,7 +38,7 @@ export default async function Staff({ searchParams }) {
               count(*) FILTER (WHERE status <> 'cancelled' AND created_at >= date_trunc('month', now() AT TIME ZONE 'Africa/Lusaka'))::int AS month_orders
          FROM portal_orders`,
     db`SELECT count(*)::int AS n, count(*) FILTER (WHERE c.status <> 'ACTIVE')::int AS pending
-         FROM portal_accounts a JOIN customers c ON c.customer_id = a.customer_id WHERE a.is_active`,
+         FROM portal_accounts a LEFT JOIN customers c ON c.customer_id = a.customer_id WHERE a.is_active`,
   ]);
 
   return (
@@ -75,7 +77,7 @@ export default async function Staff({ searchParams }) {
                     <td><a className="rowlink" href={`/staff/${o.order_id}`}>{o.order_no}</a></td>
                     <td>
                       <b>{o.trading_name}</b>{" "}
-                      {o.customer_status !== "ACTIVE" && <span className="pill new">New customer</span>}
+                      {o.customer_status === "RETAIL" ? <span className="pill">Retail</span> : o.customer_status !== "ACTIVE" && <span className="pill new">New customer</span>}
                       <div className="muted">{o.contact_name} · {displayPhone(o.phone)}</div>
                     </td>
                     <td>{fmt(o.created_at)}{o.preferred_date && <div className="muted">Needed {new Date(o.preferred_date).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</div>}</td>

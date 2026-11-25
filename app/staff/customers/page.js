@@ -2,7 +2,11 @@ import { TIERS, TIER_WINDOW_DAYS } from "@/lib/config";
 import { loadCustomerRanking } from "@/lib/insights";
 import { displayPhone } from "@/lib/phone";
 import { kwacha } from "@/lib/pricing";
+import { sql } from "@/lib/db";
+import { currentStaff } from "@/lib/staff-req";
+import { OWNER_EDITOR_ROLES } from "@/lib/staff-token";
 import StaffBar from "../StaffBar";
+import OwnerSelect from "./OwnerSelect";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "freshDrip · Customers" };
@@ -13,12 +17,19 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "nume
 const fmtPacks = (n) => (n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(1));
 
 export default async function Customers({ searchParams }) {
-  const all = await loadCustomerRanking();
+  const [all, team] = await Promise.all([
+    loadCustomerRanking(),
+    sql()`SELECT user_id, full_name FROM users WHERE COALESCE(is_active, true) AND role NOT IN ('counter', 'operator', 'viewer', 'super_viewer') ORDER BY full_name`,
+  ]);
+  const people = team.map((u) => ({ id: u.user_id, name: u.full_name }));
+  const canEdit = OWNER_EDITOR_ROLES.includes(currentStaff()?.role);
+  const owner = ["none", ...people.map((p) => p.id)].includes(searchParams?.owner) ? searchParams.owner : "";
   const tier = TIERS.some((t) => t.key === searchParams?.tier) ? searchParams.tier : "";
   const health = HEALTH.includes(searchParams?.health) ? searchParams.health : "";
-  const rows = all.filter((c) => (!tier || c.tier.key === tier) && (!health || c.health === health));
+  const rows = all.filter((c) => (!tier || c.tier.key === tier) && (!health || c.health === health)
+    && (!owner || (owner === "none" ? !c.ownerId : c.ownerId === owner)));
   const qs = (o) => {
-    const p = new URLSearchParams({ ...(tier ? { tier } : {}), ...(health ? { health } : {}), ...o });
+    const p = new URLSearchParams({ ...(tier ? { tier } : {}), ...(health ? { health } : {}), ...(owner ? { owner } : {}), ...o });
     for (const [k, v] of [...p]) if (!v) p.delete(k);
     const s = p.toString();
     return s ? `?${s}` : "";
@@ -53,15 +64,23 @@ export default async function Customers({ searchParams }) {
           ))}
         </nav>
 
+        <nav className="tabs" aria-label="Filter by account owner" style={{ marginTop: -4 }}>
+          <a href={`/staff/customers${qs({ owner: "" })}`} aria-current={!owner ? "true" : undefined}>Any owner</a>
+          <a href={`/staff/customers${qs({ owner: "none" })}`} aria-current={owner === "none" ? "true" : undefined}>No owner · {all.filter((c) => !c.ownerId).length}</a>
+          {people.filter((p) => all.some((c) => c.ownerId === p.id)).map((p) => (
+            <a key={p.id} href={`/staff/customers${qs({ owner: p.id })}`} aria-current={owner === p.id ? "true" : undefined}>{p.name.split(" ")[0]} · {all.filter((c) => c.ownerId === p.id).length}</a>
+          ))}
+        </nav>
+
         <div className="tbl">
           {rows.length === 0 ? (
             <p className="empty" style={{ border: 0, margin: 0 }}>No customers match.</p>
           ) : (
-            <table style={{ minWidth: 980 }}>
+            <table style={{ minWidth: 1140 }}>
               <thead>
                 <tr>
                   <th className="num">#</th><th>Customer</th><th>Tier</th><th className="num">Packs ({TIER_WINDOW_DAYS}d)</th><th>Next tier</th>
-                  <th className="num">Revenue ({TIER_WINDOW_DAYS}d)</th><th className="num">Lifetime</th><th className="num">Sales</th><th>Last purchase</th><th>Health</th>
+                  <th className="num">Revenue ({TIER_WINDOW_DAYS}d)</th><th className="num">Lifetime</th><th className="num">Sales</th><th>Last purchase</th><th>Health</th><th>Account owner</th>
                 </tr>
               </thead>
               <tbody>
@@ -85,6 +104,7 @@ export default async function Customers({ searchParams }) {
                     <td className="num">{c.ordersLife}</td>
                     <td>{fmtDate(c.lastAt)}{c.daysSince != null && <div className="muted">{c.daysSince} days ago</div>}</td>
                     <td><span className={`pill ${healthPill[c.health]}`}>{c.health}</span></td>
+                    <td><OwnerSelect customerId={c.id} ownerId={c.ownerId} people={people} canEdit={canEdit} /></td>
                   </tr>
                 ))}
               </tbody>

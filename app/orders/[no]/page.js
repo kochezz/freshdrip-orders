@@ -1,6 +1,10 @@
+import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import QRCode from "qrcode";
 import { getSession } from "@/lib/auth";
-import { STATUSES, statusInfo } from "@/lib/config";
+import { MOBILE_MONEY, PICKUP_HOURS, PICKUP_POINTS, PICKUP_RULE, statusInfo, statusInfoFor, statusesFor } from "@/lib/config";
+import { formatPickupCode, pickupUrl } from "@/lib/pickup";
+import MomoReference from "./MomoReference";
 import { sql } from "@/lib/db";
 import { kwacha } from "@/lib/pricing";
 import Footer from "../../Footer";
@@ -15,15 +19,32 @@ export default async function OrderDetail({ params }) {
   const session = await getSession();
   if (!session) redirect("/");
   const db = sql();
-  const [order] = await db`SELECT * FROM portal_orders WHERE order_no = ${params.no} AND customer_id = ${session.customer_id}`;
+  const [order] = await db`SELECT * FROM portal_orders WHERE order_no = ${params.no} AND (customer_id = ${session.customer_id} OR account_id = ${session.account_id})`;
   if (!order) notFound();
-  const [lines, events] = await Promise.all([
+  const [lines, events, saleRows] = await Promise.all([
     db`SELECT * FROM portal_order_lines WHERE order_id = ${order.order_id} ORDER BY line_total_zmw DESC`,
     db`SELECT status, note, created_at, actor FROM portal_order_events WHERE order_id = ${order.order_id} ORDER BY created_at`,
+    order.transaction_id
+      ? db`SELECT receipt_number, transaction_date, payment_method, payment_reference, status FROM sales_transactions WHERE transaction_id = ${order.transaction_id}`
+      : Promise.resolve([]),
   ]);
+  // Paid = the order's ERP sale exists (recorded when staff confirm an
+  // Airtel Money payment, or at hand-over).
+  const sale = saleRows[0] && saleRows[0].status === "completed" ? saleRows[0] : null;
 
   const cancelled = order.status === "cancelled";
+  const STATUSES = statusesFor(order.fulfilment);
+  const info = statusInfoFor(order.fulfilment, order.status);
   const step = STATUSES.findIndex((s) => s.key === order.status);
+  const pp = order.pickup_point ? PICKUP_POINTS[order.pickup_point] : null;
+  const collected = order.fulfilment === "collect" && (order.status === "delivered" || order.picked_up_at);
+  // The QR opens the staff pickup screen for this order (staff sign-in needed).
+  let qrSvg = null;
+  if (order.pickup_code && !cancelled && !collected) {
+    const h = headers();
+    const origin = `${h.get("x-forwarded-proto") || "https"}://${h.get("x-forwarded-host") || h.get("host")}`;
+    qrSvg = await QRCode.toString(pickupUrl(origin, order.pickup_code), { type: "svg", margin: 1, errorCorrectionLevel: "M", color: { dark: "#10203a", light: "#ffffff" } });
+  }
   const reached = (key) => events.find((e) => e.status === key);
   const fee = order.delivery_fee_zmw == null ? null : Number(order.delivery_fee_zmw);
   // Notes staff wrote for the customer (not the customer's own submit event).
@@ -37,13 +58,65 @@ export default async function OrderDetail({ params }) {
           <a href="/orders" className="muted" style={{ fontSize: ".88rem" }}>← My orders</a>
           <h1>{order.order_no}</h1>
           <p>
-            <span className={`pill ${order.status}`}>{statusInfo(order.status).label}</span>{" "}
-            {statusInfo(order.status).help}
+            <span className={`pill ${order.status}`}>{info.label}</span>{" "}
+            {info.help}
           </p>
         </div>
 
         <div className="detail">
           <div style={{ display: "grid", gap: 16 }}>
+            {qrSvg && (
+              <section className="panel pickup-card">
+                <div>
+                  <span className="label">Pickup code</span>
+                  <h2 style={{ margin: "2px 0 6px" }}>{formatPickupCode(order.pickup_code)}</h2>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Show this at <b>{pp?.label}</b>{pp ? `, ${pp.address}` : ""}. {pp?.contact}. Staff scan it to hand over your order and close it.
+                  </p>
+                  {order.status === "submitted" && <p className="notice" style={{ marginTop: 10 }}>We're getting your order ready. Wait for "Ready to collect" before you travel, or call 0571 403 871.</p>}
+                </div>
+                <div className="qr" aria-label={`QR code for pickup ${formatPickupCode(order.pickup_code)}`} dangerouslySetInnerHTML={{ __html: qrSvg }} />
+              </section>
+            )}
+            {order.fulfilment === "collect" && !cancelled && (
+              sale ? (
+                <div className="paybanner paid">
+                  <b>Paid · {kwacha(order.subtotal_zmw)}</b>
+                  <span>
+                    {sale.payment_method === "mobile" ? MOBILE_MONEY.provider : sale.payment_method === "card" ? "Card" : "Cash"}
+                    {sale.payment_reference ? `, ref ${sale.payment_reference}` : ""} · {fmt(sale.transaction_date)} · receipt {sale.receipt_number}
+                  </span>
+                  <a href={`/orders/${encodeURIComponent(order.order_no)}/receipt`} target="_blank" rel="noopener">View and download your receipt</a>
+                </div>
+              ) : !collected && (
+                <div className={`paybanner ${order.collect_by && new Date(order.collect_by) < new Date() ? "late" : "due"}`}>
+                  <b>Not paid yet · {kwacha(order.subtotal_zmw)}</b>
+                  <span>
+                    {order.collect_by
+                      ? <>Pay and collect by <b>{fmt(order.collect_by)}</b>. If it isn't paid and collected by then, the order is cancelled automatically and the stock goes back on sale.</>
+                      : <>{PICKUP_RULE}</>}
+                  </span>
+                  {order.momo_reference && <span>You reported {MOBILE_MONEY.provider} transaction <b>{order.momo_reference}</b>. We'll mark the order paid once we've checked it.</span>}
+                </div>
+              )
+            )}
+            {cancelled && order.cancel_reason === "not_collected_48h" && (
+              <div className="paybanner late">
+                <b>Cancelled: not collected in time</b>
+                <span>The order wasn't paid for and collected within {PICKUP_HOURS} hours of being ready, so the stock went back on sale. Nothing is owed. You can order again any time.</span>
+              </div>
+            )}
+            {order.payment_method === "mobile_money" && !sale && !collected && !cancelled && (
+              <section className="panel">
+                <h2>Payment by {MOBILE_MONEY.provider}</h2>
+                <p style={{ marginTop: 0 }}>
+                  Send <b>{kwacha(order.subtotal_zmw)}</b> to <b>{MOBILE_MONEY.number}</b>, registered name <b>{MOBILE_MONEY.name}</b> ({MOBILE_MONEY.owner}).
+                  Use <b>{order.order_no}</b> as the reference.
+                </p>
+                <MomoReference orderNo={order.order_no} current={order.momo_reference} />
+                <p className="muted" style={{ fontSize: ".82rem", marginBottom: 0 }}>We check the payment in our wallet, then this page shows <b>Paid</b> and your receipt. You can also pay when you collect.</p>
+              </section>
+            )}
             <section className="panel">
               <h2>Items</h2>
               <div className="lines" style={{ border: 0, marginTop: 0 }}>
@@ -51,7 +124,7 @@ export default async function OrderDetail({ params }) {
                   <div className="ln" key={l.line_id} style={{ gridTemplateColumns: "minmax(0,1fr) auto", padding: "10px 0" }}>
                     <div>
                       <div className="n">{l.product_name}</div>
-                      <div className="d">{l.packs} × {l.pack_label} at {kwacha(l.pack_price_zmw)}</div>
+                      <div className="d">{l.packs} × {l.pack_label} at {kwacha(l.pack_price_zmw)}{l.price_tier === "retail" ? " retail" : " wholesale"}</div>
                     </div>
                     <div className="t">{kwacha(l.line_total_zmw)}</div>
                   </div>
@@ -64,6 +137,9 @@ export default async function OrderDetail({ params }) {
                   <span>{order.fulfilment === "collect" ? "Collection" : fee == null ? "To be quoted" : fee === 0 ? "Free" : kwacha(fee)}</span>
                 </div>
                 <div className="big"><span>Total</span><b>{kwacha(Number(order.subtotal_zmw) + (fee || 0))}</b></div>
+                {Number(order.retail_value_zmw) > Number(order.subtotal_zmw) && (
+                  <div className="saving"><span>You saved vs retail</span><b>{kwacha(Number(order.retail_value_zmw) - Number(order.subtotal_zmw))}</b></div>
+                )}
                 {order.status === "submitted" && <span className="muted" style={{ fontSize: ".78rem" }}>Estimate until we confirm the order.</span>}
               </div>
             </section>
@@ -73,7 +149,11 @@ export default async function OrderDetail({ params }) {
               <dl className="kv">
                 <dt>Placed</dt><dd>{fmt(order.created_at)}</dd>
                 <dt>{order.fulfilment === "collect" ? "Collection" : "Deliver to"}</dt>
-                <dd>{order.fulfilment === "collect" ? "Factory, Kitwe Road, Chingola" : [order.delivery_address, order.delivery_town].filter(Boolean).join(", ")}</dd>
+                <dd>{order.fulfilment === "collect" ? (pp ? `${pp.label}, ${pp.address}` : "Factory, Kitwe Road, Chingola") : [order.delivery_address, order.delivery_town].filter(Boolean).join(", ")}</dd>
+                {order.fulfilment === "collect" && (<><dt>Payment</dt><dd>{order.payment_method === "mobile_money" ? `${MOBILE_MONEY.provider}${order.momo_reference ? ` · ref ${order.momo_reference}` : ""}` : "When you collect"}</dd></>)}
+                {order.collect_by && !sale && !cancelled && (<><dt>Collect by</dt><dd>{fmt(order.collect_by)}</dd></>)}
+                {sale && (<><dt>Receipt</dt><dd><a href={`/orders/${encodeURIComponent(order.order_no)}/receipt`} target="_blank" rel="noopener">{sale.receipt_number}</a></dd></>)}
+                {order.picked_up_at && (<><dt>Collected</dt><dd>{fmt(order.picked_up_at)}</dd></>)}
                 {order.preferred_date && (<><dt>Needed by</dt><dd>{new Date(order.preferred_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</dd></>)}
                 {order.po_number && (<><dt>PO number</dt><dd>{order.po_number}</dd></>)}
                 {order.notes && (<><dt>Your notes</dt><dd>{order.notes}</dd></>)}
@@ -104,11 +184,11 @@ export default async function OrderDetail({ params }) {
             </ol>
             {notes.length > 0 && (
               <>
-                <h2 style={{ marginTop: 10 }}>Messages from freshDrip</h2>
+                <h2 style={{ marginTop: 10 }}>Messages from freshDRIP</h2>
                 <ol className="timeline">
                   {notes.map((n, i) => (
                     <li key={i} className="on">
-                      <b>{statusInfo(n.status).label}</b>
+                      <b>{statusInfoFor(order.fulfilment, n.status).label}</b>
                       <span>{fmt(n.created_at)}</span>
                       <p>{n.note}</p>
                     </li>

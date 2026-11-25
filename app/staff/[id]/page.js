@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { ALL_STATUS_KEYS, statusInfo } from "@/lib/config";
+import { ALL_STATUS_KEYS, MOBILE_MONEY, PICKUP_POINTS, statusInfo, statusInfoFor } from "@/lib/config";
+import { formatPickupCode } from "@/lib/pickup";
 import { sql } from "@/lib/db";
 import { displayPhone } from "@/lib/phone";
 import { kwacha } from "@/lib/pricing";
@@ -14,10 +15,12 @@ export default async function StaffOrder({ params }) {
   if (!/^[0-9a-f-]{36}$/i.test(params.id)) notFound();
   const db = sql();
   const [order] = await db`
-    SELECT o.*, c.trading_name, c.status AS customer_status, c.vtl_customer_id, c.payment_terms, c.tier_name,
-           a.contact_name, a.phone, COALESCE(a.email, c.email) AS email, a.source AS account_source
+    SELECT o.*, COALESCE(c.trading_name, o.customer_name) AS trading_name,
+           COALESCE(c.status, 'RETAIL') AS customer_status, c.vtl_customer_id, c.payment_terms, c.tier_name,
+           COALESCE(a.contact_name, o.customer_name) AS contact_name, COALESCE(a.phone, o.customer_phone) AS phone,
+           COALESCE(a.email, c.email) AS email, a.source AS account_source, a.account_kind
       FROM portal_orders o
-      JOIN customers c ON c.customer_id = o.customer_id
+      LEFT JOIN customers c ON c.customer_id = o.customer_id
       LEFT JOIN portal_accounts a ON a.account_id = o.account_id
      WHERE o.order_id = ${params.id}`;
   if (!order) notFound();
@@ -54,8 +57,10 @@ export default async function StaffOrder({ params }) {
           <span className="label">Order</span>
           <h1>{order.order_no} · {order.trading_name}</h1>
           <p>
-            <span className={`pill ${order.status}`}>{statusInfo(order.status).label}</span>{" "}
-            {order.customer_status !== "ACTIVE" && <span className="pill new">New customer · {order.customer_status} in ERP</span>}
+            <span className={`pill ${order.status}`}>{statusInfoFor(order.fulfilment, order.status).label}</span>{" "}
+            {order.customer_status === "RETAIL" ? <span className="pill">Retail buyer</span>
+              : order.customer_status !== "ACTIVE" && <span className="pill new">New customer · {order.customer_status} in ERP</span>}
+            {order.pricing && order.pricing !== "wholesale" && <span className="pill">{order.pricing === "retail" ? "Retail prices" : "Wholesale + retail"}</span>}
           </p>
         </div>
         <div className="detail">
@@ -79,7 +84,7 @@ export default async function StaffOrder({ params }) {
                 </table>
               </div>
               <div className="sum">
-                <div><span>{order.total_packs} packs, wholesale</span><b>{kwacha(order.subtotal_zmw)}</b></div>
+                <div><span>{order.total_packs} packs, {order.pricing === "retail" ? "retail" : order.pricing === "mixed" ? "wholesale + retail" : "wholesale"}</span><b>{kwacha(order.subtotal_zmw)}</b></div>
                 <div><span>Delivery</span><span>{order.fulfilment === "collect" ? "Collection" : fee == null ? "Not quoted yet" : kwacha(fee)}</span></div>
                 <div className="big"><span>Total</span><b>{kwacha(Number(order.subtotal_zmw) + (fee || 0))}</b></div>
               </div>
@@ -92,7 +97,8 @@ export default async function StaffOrder({ params }) {
                 <dt>Contact</dt><dd>{order.contact_name} · <a href={`tel:+${order.phone}`}>{displayPhone(order.phone)}</a>{order.email && <> · <a href={`mailto:${order.email}`}>{order.email}</a></>}</dd>
                 <dt>Login</dt><dd>{order.account_source === "claimed" ? "Claimed an existing ERP customer by phone. Verify if unsure." : "Registered on the portal"}</dd>
                 <dt>{order.fulfilment === "collect" ? "Collection" : "Deliver to"}</dt>
-                <dd>{order.fulfilment === "collect" ? "Factory, Kitwe Road" : [order.delivery_address, order.delivery_town].filter(Boolean).join(", ")}</dd>
+                <dd>{order.fulfilment === "collect" ? (PICKUP_POINTS[order.pickup_point] ? `${PICKUP_POINTS[order.pickup_point].label}, ${PICKUP_POINTS[order.pickup_point].address}` : "Factory, Kitwe Road") : [order.delivery_address, order.delivery_town].filter(Boolean).join(", ")}</dd>
+                {order.fulfilment === "collect" && (<><dt>Payment</dt><dd>{order.payment_method === "mobile_money" ? `${MOBILE_MONEY.provider}${order.momo_reference ? `, ref ${order.momo_reference}` : ", no ref yet"}` : "At pickup"}</dd></>)}
                 {order.preferred_date && (<><dt>Needed by</dt><dd>{new Date(order.preferred_date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</dd></>)}
                 {order.po_number && (<><dt>PO number</dt><dd>{order.po_number}</dd></>)}
                 {order.notes && (<><dt>Customer notes</dt><dd>{order.notes}</dd></>)}
@@ -118,10 +124,17 @@ export default async function StaffOrder({ params }) {
                   ) : (
                     <p className="muted" style={{ marginTop: 0 }}>No stock held yet. Confirming the order holds it at the store you pick.</p>
                   )}
-                  {order.status !== "cancelled" && (
-                    <a className="btn block" href={`/staff/sell?order=${order.order_id}`}>Sell &amp; dispatch</a>
+                  {order.status !== "cancelled" && order.pickup_code ? (
+                    <>
+                      <a className="btn block" href={`/staff/pickup/${order.pickup_code}`}>Open pickup · {formatPickupCode(order.pickup_code)}</a>
+                      <p className="muted" style={{ fontSize: ".82rem" }}>Collection order: the counter scans the customer's QR to hand over, take payment and close it.</p>
+                    </>
+                  ) : order.status !== "cancelled" && (
+                    <>
+                      <a className="btn block" href={`/staff/sell?order=${order.order_id}`}>Sell &amp; dispatch</a>
+                      <p className="muted" style={{ fontSize: ".82rem" }}>Records the sale in the ERP (takes the stock out, payment on dispatch) and prints the delivery note for signing.</p>
+                    </>
                   )}
-                  <p className="muted" style={{ fontSize: ".82rem" }}>Records the sale in the ERP (takes the stock out, payment on dispatch) and prints the delivery note for signing.</p>
                 </>
               )}
             </section>
@@ -135,8 +148,8 @@ export default async function StaffOrder({ params }) {
                 hasEmail={!!order.email}
                 held={held.length > 0}
                 sold={!!sold}
-                locations={locations.map((l) => ({ id: l.location_id, label: `${l.location_code} · ${l.location_name} (${l.units.toLocaleString()} units)` }))}
-                statuses={ALL_STATUS_KEYS.map((k) => ({ key: k, label: statusInfo(k).label }))}
+                locations={order.pickup_point ? [] : locations.map((l) => ({ id: l.location_id, label: `${l.location_code} · ${l.location_name} (${l.units.toLocaleString()} units)` }))}
+                statuses={(order.pickup_code ? ["submitted", "ready", "cancelled"] : ALL_STATUS_KEYS).map((k) => ({ key: k, label: statusInfoFor(order.fulfilment, k).label }))}
               />
             </section>
             <section className="panel">
@@ -144,7 +157,7 @@ export default async function StaffOrder({ params }) {
               <ol className="timeline">
                 {events.map((e) => (
                   <li key={e.event_id} className={e.status === "cancelled" ? "x" : "on"}>
-                    <b>{statusInfo(e.status).label}</b>
+                    <b>{statusInfoFor(order.fulfilment, e.status).label}</b>
                     <span>{fmt(e.created_at)} · {e.actor}</span>
                     {e.note && <p>{e.note}</p>}
                   </li>

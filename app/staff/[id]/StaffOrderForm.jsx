@@ -8,7 +8,8 @@ export default function StaffOrderForm({ orderId, status, fee, fulfilment, hasEm
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const needsStore = !held && !sold && ["confirmed", "ready"].includes(f.status) && f.status !== status;
+  // Collection orders get no picker: their pickup point decides the store.
+  const needsStore = locations.length > 0 && !held && !sold && ["confirmed", "ready"].includes(f.status) && f.status !== status;
 
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 

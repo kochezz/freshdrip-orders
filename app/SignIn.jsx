@@ -5,8 +5,9 @@ import { useState } from "react";
 // One screen, several steps:
 //   phone -> pin       (has a login)
 //   phone -> claim     (on our customer list, no login yet)
-//   phone -> register  (new: business details, then PIN)
-export default function SignIn({ minPacks, outlet, businessTypes }) {
+//   phone -> kind -> retail    (new, buying for themselves: name and PIN)
+//   phone -> kind -> register  (new business: business details, then PIN)
+export default function SignIn({ families, pickupPoints, businessTypes }) {
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
   const [business, setBusiness] = useState("");
@@ -50,7 +51,17 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
       setReset(data.state === "reset");
       setBusiness(data.business);
       setStep("claim");
-    } else setStep("register");
+    } else setStep("kind");
+  }
+
+  async function registerRetail(e) {
+    e.preventDefault();
+    const er = {};
+    if (f.contactName.trim().length < 2) er.contactName = "Enter your name.";
+    setErrors(er);
+    if (Object.keys(er).length) return;
+    const data = await post("/api/auth/register", { phone, kind: "retail", contactName: f.contactName, email: f.email, pin: f.pin, pinConfirm: f.pinConfirm });
+    if (data) window.location.href = "/shop";
   }
 
   async function login(e) {
@@ -143,8 +154,8 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
       {step === "phone" && (
         <form onSubmit={checkPhone} noValidate>
           <span className="label">Sign in or register</span>
-          <h2>Wholesale orders</h2>
-          <p className="sub">Enter your mobile number. New customers can register in two minutes.</p>
+          <h2>Order freshDRIP</h2>
+          <p className="sub">Enter your mobile number. New here? It takes a minute to sign up.</p>
           <label className="field">
             <span>Mobile number</span>
             <input
@@ -163,7 +174,8 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
             {busy ? "Checking…" : "Continue"}
           </button>
           <p className="notice">
-            <b>Minimum order {minPacks} packs.</b> For smaller quantities, visit our retail outlet at {outlet.address}.
+            <b>Any quantity, collect from {pickupPoints.map((p) => p.label).join(" or ")}.</b> Wholesale prices switch on by themselves from{" "}
+            {families.map((x) => `${x.threshold} ${x.unit} of ${x.label.toLowerCase()}`).join(", ")}.
           </p>
         </form>
       )}
@@ -202,6 +214,41 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
         </form>
       )}
 
+      {step === "kind" && (
+        <div>
+          <span className="label">New to freshDRIP online</span>
+          <h2>Who are you buying for?</h2>
+          <p className="sub">{phone}</p>
+          <div className="pickups" style={{ marginTop: 12 }}>
+            <button type="button" className="pickup" onClick={() => { setErrors({}); setStep("retail"); }}>
+              <b>Myself or my household</b>
+              <span>Quick sign-up: your name and a PIN. Order any quantity and collect it.</span>
+            </button>
+            <button type="button" className="pickup" onClick={() => { setErrors({}); setStep("register"); }}>
+              <b>My business</b>
+              <span>Open a business account with us: shops, offices, hotels, resellers. Delivery available on wholesale orders.</span>
+            </button>
+          </div>
+          <button type="button" className="back" onClick={back("phone")}>← Use a different number</button>
+        </div>
+      )}
+
+      {step === "retail" && (
+        <form onSubmit={registerRetail} noValidate>
+          <span className="label">Sign up</span>
+          <h2>Your details</h2>
+          <p className="sub">You'll sign in with {phone} and your PIN.</p>
+          {Field({ k: "contactName", label: "Your name", autoComplete: "name" })}
+          {Field({ k: "email", label: "Email", hint: "(optional, for order confirmations)", type: "email", inputMode: "email", autoComplete: "email" })}
+          {PinFields({ confirm: true })}
+          {errors.form && <p className="form-err">{errors.form}</p>}
+          <button className="btn block" style={{ marginTop: 16 }} disabled={busy}>
+            {busy ? "Creating your account…" : "Create account and shop"}
+          </button>
+          <button type="button" className="back" onClick={back("kind")}>← Back</button>
+        </form>
+      )}
+
       {step === "register" && (
         <form onSubmit={nextRegister} noValidate>
           <span className="label">New wholesale customer · step 1 of 2</span>
@@ -229,7 +276,7 @@ export default function SignIn({ minPacks, outlet, businessTypes }) {
           </div>
           {errors.form && <p className="form-err">{errors.form}</p>}
           <button className="btn block" style={{ marginTop: 16 }}>Next: choose a PIN</button>
-          <button type="button" className="back" onClick={back("phone")}>← Use a different number</button>
+          <button type="button" className="back" onClick={back("kind")}>← Back</button>
         </form>
       )}
 

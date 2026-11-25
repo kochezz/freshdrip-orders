@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { STATUSES, TIER_WINDOW_DAYS, statusInfo } from "@/lib/config";
+import { STATUSES, TIER_WINDOW_DAYS, statusInfoFor } from "@/lib/config";
 import { loadCustomerTier } from "@/lib/insights";
 import { sql } from "@/lib/db";
 import { kwacha } from "@/lib/pricing";
@@ -14,10 +14,10 @@ const fmtDate = (d) => new Date(d).toLocaleDateString("en-GB", { day: "numeric",
 export default async function Orders() {
   const session = await getSession();
   if (!session) redirect("/");
-  const tierP = loadCustomerTier(session.customer_id).catch(() => null);
+  const tierP = session.customer_id ? loadCustomerTier(session.customer_id).catch(() => null) : Promise.resolve(null);
   const orders = await sql()`
     SELECT order_no, status, created_at, total_packs, subtotal_zmw, delivery_fee_zmw, fulfilment
-      FROM portal_orders WHERE customer_id = ${session.customer_id}
+      FROM portal_orders WHERE (customer_id = ${session.customer_id} OR account_id = ${session.account_id})
      ORDER BY created_at DESC LIMIT 100`;
   const tier = await tierP;
 
@@ -65,7 +65,7 @@ export default async function Orders() {
                     </div>
                   </div>
                   <div className="amt">
-                    <span className={`pill ${o.status}`}>{statusInfo(o.status).label}</span>
+                    <span className={`pill ${o.status}`}>{statusInfoFor(o.fulfilment, o.status).label}</span>
                     <div style={{ marginTop: 6 }}>{kwacha(total)}</div>
                   </div>
                 </div>
