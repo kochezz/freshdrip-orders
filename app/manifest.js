@@ -4,7 +4,7 @@ export default function manifest() {
     id: "/",
     name: "freshDrip Wholesale Orders",
     short_name: "freshDrip",
-    description: "Order freshDrip spring water wholesale and track your orders.",
+    description: "Order freshDRIP drinking water, retail or wholesale, and track your orders.",
     start_url: "/shop?source=app",
     scope: "/",
     display: "standalone",

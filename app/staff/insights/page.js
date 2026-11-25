@@ -1,5 +1,5 @@
 import { TIERS, TIER_WINDOW_DAYS } from "@/lib/config";
-import { PERIODS, loadDashboard, periodFor } from "@/lib/insights";
+import { PERIODS, loadDashboard, loadLeaderboard, periodFor } from "@/lib/insights";
 import { displayPhone } from "@/lib/phone";
 import { kwacha } from "@/lib/pricing";
 import StaffBar from "../StaffBar";
@@ -22,7 +22,7 @@ function Delta({ cur, prev }) {
 
 export default async function Insights({ searchParams }) {
   const period = periodFor(searchParams?.period);
-  const d = await loadDashboard(period.days);
+  const [d, lb] = await Promise.all([loadDashboard(period.days), loadLeaderboard(period.days)]);
   const k = d.kpis;
   const totalRev = d.skus.reduce((s, x) => s + x.zmw, 0);
   const maxSku = Math.max(1, ...d.skus.map((x) => x.zmw));
@@ -64,6 +64,48 @@ export default async function Insights({ searchParams }) {
             <a className="btn ghost small" href={`/api/staff/reports?type=sales&days=${period.days}`}>Download sales (CSV)</a>
           </div>
           <RevenueChart data={d.trend.map((t) => ({ ...t, start: new Date(t.start).toISOString() }))} bucket={d.bucket} />
+        </section>
+
+        <section className="panel" id="team">
+          <div className="panel-head">
+            <h2>Sales team · last {period.label}</h2>
+            <span className="muted" style={{ fontSize: ".84rem" }}>Team total {K0(lb.team)}</span>
+          </div>
+          <p className="muted" style={{ marginTop: 0, fontSize: ".84rem" }}>
+            Ranked by revenue. Phone and till sales count for the seller; online and pickup orders for the customer&rsquo;s account owner (set on the Customers tab).
+          </p>
+          {lb.people.length === 0 ? (
+            <p className="muted">No credited sales in this period.</p>
+          ) : (
+            <div className="tbl" style={{ marginTop: 6 }}>
+              <table>
+                <thead>
+                  <tr><th>#</th><th>Salesperson</th><th className="num">Revenue</th><th className="num">Share</th><th className="num">Sales</th><th className="num">Avg sale</th><th className="num">Wholesale</th><th className="num">Customers</th><th className="num">New accounts</th><th>vs previous</th></tr>
+                </thead>
+                <tbody>
+                  {lb.people.map((p) => (
+                    <tr key={p.userId}>
+                      <td><b>{p.rank === 1 && p.revenue > 0 ? "🥇" : p.rank === 2 ? "🥈" : p.rank === 3 ? "🥉" : p.rank}</b></td>
+                      <td><b>{p.name}</b><div className="muted">{p.role.replace(/_/g, " ")}{p.online ? ` · ${p.online} online` : ""}</div></td>
+                      <td className="num">{K0(p.revenue)}</td>
+                      <td className="num">{pct(p.share)}</td>
+                      <td className="num">{p.sales}</td>
+                      <td className="num">{K0(p.avg)}</td>
+                      <td className="num">{K0(p.wholesale)}</td>
+                      <td className="num">{p.buyers}</td>
+                      <td className="num">{p.newAccounts || "—"}</td>
+                      <td><Delta cur={p.revenue} prev={p.prev} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {lb.unowned.sales > 0 && (
+            <p className="muted" style={{ fontSize: ".84rem", marginBottom: 0 }}>
+              Online orders from customers with no account owner: {lb.unowned.sales} sale{lb.unowned.sales === 1 ? "" : "s"}, {K0(lb.unowned.revenue)}. Assign owners on the <a href="/staff/customers">Customers</a> tab so they count.
+            </p>
+          )}
         </section>
 
         <div className="split2">

@@ -3,7 +3,7 @@ import RegisterSW from "./RegisterSW";
 
 export const metadata = {
   title: "freshDrip Wholesale · Order online",
-  description: "Order freshDrip spring water wholesale from Vilagio Trading Limited, Chingola, and track your orders.",
+  description: "Order freshDRIP purified drinking water, retail or wholesale, from Vilagio Trading Limited, Chingola. Collect or have it delivered, and track your orders.",
   robots: { index: false, follow: false },
   applicationName: "freshDrip",
   icons: {

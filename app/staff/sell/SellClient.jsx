@@ -93,6 +93,9 @@ export default function SellClient({ staff, order }) {
   }, [order, catalogue]);
 
   const byId = useMemo(() => Object.fromEntries((catalogue || []).map((p) => [p.product_id, p])), [catalogue]);
+  // A portal order's lines keep the tier the customer was quoted (wholesale
+  // unlocks per product family); the ERP prices them the same way.
+  const orderTier = useMemo(() => Object.fromEntries((order?.lines || []).map((l) => [`${l.product_id}:${l.pack_size}`, l.tier])), [order]);
 
   // Stores holding a product, with free units. A portal order's held stock
   // counts as free for its own dispatch.
@@ -118,7 +121,7 @@ export default function SellClient({ staff, order }) {
       const [productId, ps] = k.split(":");
       const product = byId[productId];
       const packSize = ps === "null" ? null : Number(ps);
-      return product ? { key: k, product, productId, packSize: packSize ?? 1, sendPackSize: packSize, packs } : null;
+      return product ? { key: k, product, productId, packSize: packSize ?? 1, sendPackSize: packSize, packs, quoted: orderTier[k] } : null;
     })
     .filter(Boolean);
   const totals = priceCart(cartLines, { customerTier, wholesale, discountPercent });

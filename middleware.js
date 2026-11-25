@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { neon } from "@neondatabase/serverless";
-import { STAFF_COOKIE, STAFF_ROLES, readStaffToken } from "./lib/staff-token";
+import { COUNTER_PATHS, COUNTER_ROLE, STAFF_COOKIE, STAFF_ROLES, readStaffToken } from "./lib/staff-token";
 
 // Re-checked on every staff request: someone deactivated (or moved to a role
 // without staff access) in the ERP is locked out at once, not when their
@@ -63,6 +63,15 @@ export async function middleware(req) {
     const res = NextResponse.redirect(url);
     res.cookies.set(STAFF_COOKIE, "", { path: "/", maxAge: 0 });
     return res;
+  }
+
+  // Counter staff: pickups only.
+  if (staff.role === COUNTER_ROLE && !COUNTER_PATHS.some((rx) => rx.test(pathname))) {
+    if (pathname.startsWith("/api/")) return NextResponse.json({ error: "Not available for counter logins" }, { status: 403 });
+    const url = req.nextUrl.clone();
+    url.pathname = "/staff/pickup";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
 
   headers.set("x-staff-id", staff.user_id);
